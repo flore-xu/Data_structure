@@ -1,25 +1,5 @@
 """
-   Execution:    python LinearProbingHashST.py < input.txt
-
-   Data files:   https://algs4.cs.princeton.edu/33balanced/tinyST.txt
-
    A symbol table implemented using a linear probing hash.
-   This is the 2-3 version.
-
-   % more tinyST.txt
-   S E A R C H E X A M P L E
-
-   % python LinearProbingHashST.py < tinyST.txt
-   A 8
-   C 4
-   E 12
-   H 5
-   L 11
-   M 9
-   P 10
-   R 3
-   S 0
-   X 7
 """
 from typing import Any
 
