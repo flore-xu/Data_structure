@@ -1,75 +1,105 @@
+"""
+heap sort
+code modified from Java https://algs4.cs.princeton.edu/24pq/Heap.java.html
+"""
+
 class Heap:
     @classmethod
-    def isSorted(cls, A: list[int], lo: int, hi: int) -> bool:
-        """Check if array[lo, hi] is sorted"""
-        for i in range(lo+1, hi):
-            if A[i] < A[i-1]:
+    def isSorted(cls, nums: list[int], lo: int, hi: int) -> bool:
+        """Check if array[lo..hi] is sorted"""
+        for i in range(lo+1, hi+1):
+            if nums[i] < nums[i-1]:
                 return False 
         return True
 
     @classmethod
-    def swap(cls, A: list[int], i: int, j: int) -> None:
-        """Exchanges A[i] and A[j]
+    def swap(cls, nums: list[int], i: int, j: int) -> None:
+        """Exchanges nums[i] and nums[j]
         Note: Indices are "off-by-one" to support 1-based indexing."""
-        A[i-1], A[j-1] = A[j-1], A[i-1]
+        nums[i-1], nums[j-1] = nums[j-1], nums[i-1]
 
     @classmethod
-    def less(cls, A: list[int], i: int, j: int) -> bool:
+    def less(cls, nums: list[int], i: int, j: int) -> bool:
         """if priority of node i is less than node j, return True 
         Indices are "off-by-one" to support 1-based indexing.
         Heap type is Max-heap 
         """
-        return A[i-1] < A[j-1]
+        return nums[i-1] < nums[j-1]
 
     @classmethod
-    def shift_down(cls, A: list[int], index: int, size: int) -> None:
-        """Shift-down the node to maintain max-heap invariant
-        O(logn)  Worst case node will shift-down from root to bottom
+    def shift_down(cls, nums: list[int], index: int, size: int) -> None:
+        """(recursive) sink the node at index to maintain max-heap invariant
+           O(logn)  Worst case node will shift-down from root to bottom
 
-            if priority of current node < its childen, 
-                swap with childen (i.e., shift-down current node to next level).
+            if priority of current node < its childen, swap with childen (i.e., shift-down current node to next level).
             Repeat until priority of current node ≥ its children or it is a leaf node.
         
-        @param A: max-heap
-                index: index of current node  
-                size: number of nodes in the heap
+        @param 
+        nums: max-heap
+        index: index of current node  
+        size: number of nodes in the heap
         """
-        cur = index		# position of pointer 
-        l = index << 1	        # index of left child node (1-based indexing)
-        r = (index << 1) + 1	# index of right child node 
+        max_ = index		# node of max priority
+        l = index * 2	    # index of left child node (1-based indexing)
+        r = index * 2 + 1	# index of right child node 
 
-        if l < size+1 and cls.less(A, cur, l):  # if priority of current node < its left childen
-            cur = l                         # move pointer to left child
-        if r < size+1 and cls.less(A, cur, r):  # if priority of current node < its right childen
-            cur = r                         # move pointer to right child
+        # find node of max priority from itself and its two children
+        if l <= size and cls.less(nums, max_, l):  
+            max_ = l                             
+        if r <= size and cls.less(nums, max_, r):  
+            max_ = r                            
 
-        if cur != index:                    # if pointer changes position
-            cls.swap(A, index, cur)
-            cls.shift_down(A, cur, size)    # After swap position, child node may not at correct position, so recursively shift-down the child node
+        # put node of max priority at top
+        if max_ != index:                        
+            cls.swap(nums, index, max_)             
+            cls.shift_down(nums, max_, size)        # adjust position of current node (index `max_`)
 
     @classmethod
-    def sort(cls, A: list[int]) -> list[int]:
+    def sort(cls, nums: list[int]) -> list[int]:
         """Heap sort by a max-heap
             O(NlogN) for all cases
+
+            best case: O(n) compares. all items have equal keys
+            average and worst case: 2nlogn compares
+
+
+            1. build a max-heap from array nums
+            (1) naive method O(nlogn) forward iteration
+            call heappush() n times
+            
+            max-heap = []
+            for i in range(n):
+                heapq.heappush(max-heap, nums[i])
+
+            (2) optimized method O(n) backward iteration
+            call heapify() once
+
+            heapq.heapify(nums)
+
+            2. O(NlogN) sort down. 
+            call heappop() N-1 times.
+            
+            for i in range(N-1, 0, -1):
+                nums[i] = heapq.heappop(nums)
         """
-        
-        # Step 1. O(N) construct a max-heap (from right to left of array)
-        size = len(A)
-        for index in range(size//2, 0, -1):
-            cls.shift_down(A, index, size)  # 下堆，index是子堆的根节点
+        size = len(nums)
+        # 1. O(N) build a max-heap from array nums
+        # proceed from right to left, iterates size//2 times
+        for index in range(size//2, 0, -1): # node at index is root of a small subheap
+            cls.shift_down(nums, index, size)  # sink node `index`
 
-        # Step 2. O(NlogN) sort down (call heap.pop() N-1 times)
-        while size > 1:       # O(N)
-            cls.swap(A, 1, size)  # 交换根节点和末尾节点
-            size -= 1         # 堆顶节点出堆，总节点数减1
-            cls.shift_down(A, 1, size)  # 根节点下堆 O(logN)
+        # 2. O(NlogN) sort down.
+        while size > 1:       
+            # pop root from max-heap, put it at the vacated end of array as the max-heap shrinks
+            cls.swap(nums, 1, size)  # swap root (max node) with last node of max-heap. max node is at its final position
+            size -= 1             # max node is popped, reduce heap size by one
+            cls.shift_down(nums, 1, size)  # O(logN) sink root to maintain max-heap invariant 
 
-        assert cls.isSorted(A, 0, len(A)-1)
+        assert cls.isSorted(nums, 0, len(nums)-1)
     
 
 if __name__ == '__main__':
-    
     print("Heap sort")
-    nums = [9, 8, 7, 6, 5, 4, 3, 2, 1]
+    nums = list(range(1, 100))
     print(f"nums = {nums}")
     Heap.sort(nums)
