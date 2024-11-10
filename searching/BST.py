@@ -465,34 +465,19 @@ class BST:
 
     def levelOrder(self) -> Iterable:
         """Returns all the keys in the BST in level order"""
-        res = []
-        if not self.root:	# 特例处理：当根节点为空时，直接返回空列表
-            return res 
-
-        # 初始化队列，元素为根节点
+        level_order = []
         queue = deque([self.root])	
-        
-        # 当队列非空时
         while queue:
-
-            # 取出该层全部节点，存入一个临时列表tmp
             tmp = []
-
-            # 依次从队列中取 len(queue) 个元素拓展
             for _ in range(len(queue)):
-                node = queue.popleft()	# 队首元素出队
+                node = queue.popleft()	
                 tmp.append(node.key)
-
-                # 如果节点的左/右子树不为空，也放入队列中
                 if node.left: 
                     queue.append(node.left)
                 if node.right:
                     queue.append(node.right)
-            
-            # 将该层全部节点组成的列表加入最终返回结果中
-            res.append(tmp)
-
-        return res
+            level_order.append(tmp)
+        return level_order
 
     #***************************************************************************
     #*  Check internal invariants.

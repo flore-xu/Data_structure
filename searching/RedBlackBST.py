@@ -342,21 +342,14 @@ class RedBlackBST:
 
         while queue:
             tmp = []
-
-            # 依次从队列中取 len(queue) 个元素拓展
             for _ in range(len(queue)):
-                node = queue.popleft()	# 队首元素出队
+                node = queue.popleft()
                 tmp.append(node.key)
-
-                # 如果节点的左/右子树不为空，也放入队列中
                 if node.left: 
                     queue.append(node.left)
                 if node.right:
-                    queue.append(node.right)
-            
-            # 将该层全部节点组成的列表加入最终返回结果中
+                    queue.append(node.right)           
             keys.append(tmp)
-
         return keys
 
 

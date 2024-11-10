@@ -4,7 +4,7 @@ from typing import Any
 class BinarySearchST:
     """Ordered symbol table implementation via binary search in an ordered array
        Underlying data structure is 2 parallel arrays, a sorted keys array and a value array.
-       The heart is rank() method, which tells us where to find the key in the keys array. 
+       The heart is rank() method, which finds the position of key in the keys array. 
     """
     INIT_CAPACITY = 2
     def __init__(self) -> None:
@@ -62,7 +62,7 @@ class BinarySearchST:
         return None 
 
     def rank(self, key: Any) -> int:
-        """binary search O(logN) to find position index for key to put in the table 
+        """O(logN) binary search to find position index for key to put in the table 
             @param key: the key
             @return the number of keys in the symbol table that strictly less than the specified key
             @raise ValueError if key is None
