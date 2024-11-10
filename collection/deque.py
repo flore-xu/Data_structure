@@ -1,11 +1,10 @@
 class ListNode:
-    """双向链表
-       每个节点有3个属性：当前节点的值val,指向后继节点的指针next，指向前驱节点的指针prev
-    """
+    """Doubly linked list, each node has 3 attribute
+    """         
     def __init__(self, val: int=0, next: 'ListNode'=None, prev: "ListNode"=None):
-        self.val = val 
-        self.next = next 
-        self.prev = prev
+        self.val = val      # value of current node
+        self.next = next    # a pointer points to the successor node
+        self.prev = prev    # a pointer points to predecessor node
 
 class LinkIterator:
 
@@ -23,16 +22,13 @@ class LinkIterator:
 class Deque():
     """define the deque constructor using double-linked list
     """
-    
     def __init__(self):
         """initiate the deque"""
-        self.size = 0
-        # 2个哨兵节点：一头一尾
-        self.head, self.tail = ListNode(0), ListNode(0) 
-
-        # 头指向尾，尾指向头
+        self.head, self.tail = ListNode(0), ListNode(0)  # two Sentinel Nodes, one for head and one for tail
+        # head points to tail, tail points to head
         self.head.next = self.tail
         self.tail.prev = self.head
+        self.size = 0
 
     def __str__(self) -> str:
         """Return a string representation of the queue
@@ -58,13 +54,12 @@ class Deque():
 
 
       
-
     def enqueueHead(self, item: int) -> None:
         """Adds item to the head of the deque O(1)
         """
         succ = self.head.next 
         node = ListNode(item, next=succ, prev=self.head)
-        self.head.next, succ.prev = node, node
+        self.head.next = succ.prev = node
 
         self.size += 1
     
@@ -73,7 +68,7 @@ class Deque():
         """
         pred = self.tail.prev 
         node = ListNode(item, next=self.tail, prev=pred)
-        pred.next, self.tail.prev = node, node
+        pred.next = self.tail.prev = node
 
         self.size += 1
 
@@ -135,12 +130,12 @@ if __name__ == '__main__':
 
     print(f"initial deque: {q}, size: {q.size}")
 
-    # 入队 push items to head of deque
+    # enqueue: push items to head of deque
     for item in numbers:
         q.enqueueHead(item)
         print(f"enqueueHead: {item}, deque: {q}, size: {q.size}, front: {q.front()}")
 
-    # 出队 pop items from head of deque
+    # dequeue: pop items out of head of deque
     while not q.is_empty():
         print(f"front: {q.front()}, dequeueHead: {q.dequeueHead()}, deque: {q}, size: {q.size}")
 

@@ -14,19 +14,7 @@ class ListNode:
     def __init__(self, val: int =0, next: 'ListNode' =None):
         self.val = val
         self.next = next
-
-class LinkIterator:
-
-    def __init__(self, cur: ListNode):
-        self.cur = cur
-
-    def __next__(self):
-        if not self.cur:
-            raise StopIteration()
-        else:
-            val = self.cur.val 
-            self.cur = self.cur.next
-            return val 
+ 
 
 class Stack:
 
@@ -34,16 +22,6 @@ class Stack:
         """Initializes an empty stack"""
         self.first = None   # top of stack, not head of linked list, actually tail
         self.n = 0          # size of stack
-
-    def __str__(self) -> str:
-        """Return a string representation of the Stack
-           @return the sequence of items in this stack in LIFO order, separated by spaces
-        """
-        return " ".join(str(i) for i in self)
-
-    def __iter__(self) -> LinkIterator:
-        """Returns an iterator to this stack that iterates through the items in LIFO order."""
-        return LinkIterator(self.first)
 
     def size(self) -> int:
         """Returns the number of items in the stack"""
@@ -89,11 +67,11 @@ if __name__ == '__main__':
 
     print(f"initial stack: {stk}, size: {stk.size()}")
 
-    # 入栈 push items to stack
+    # instack: push items to stack
     for item in numbers:
         stk.push(item)
         print(f"push: {item}, stack: {stk}, size: {stk.size()}, peek: {stk.peek()}")
 
-    # 出栈 pop items from stack
+    # outstack: pop items from stack
     while not stk.is_empty():
         print(f"pop: {stk.pop()}, stack: {stk}, size: {stk.size()}")
