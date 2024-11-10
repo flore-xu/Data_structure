@@ -1,120 +1,209 @@
-"""SPFA (Bellman Ford Moore) algorithm  O(VE)
-    最短路问题的通用版本 Bellman Ford的队列优化
-    T: 最坏 O(VE) 最好 O(kE)  k: 外循环次数
-    Computes the shortest path tree in edge-weighted digraph G from vertex s, 
-    or finds a negative weight cycle
+"""Shortest Path Faster Algorithm (SPFA) (Bellman Ford Moore) algorithm for single-source shortest path problem
 
-    单源最短路问题
-    定义：给定一个有向加权图G(V, E)，从一个节点s到另一个节点u的最短路径，最短指权重之和最小。
+    T: worst O(VE) best O(kE)  k is the number of iterations of outer loop
+    S: O(V+E)   adjacency list
+    
+    ----------------------------------------------------------------------
+    Variants of Bellman Ford algorithm
 
-    输入：一个有向加权图G(V, E), 一个源节点 s ∈ V 
-    输出：权重δ(s, u), 1条路径
+    standard Bellman Ford: T = O(VE)
+    SPFA: queue-optimized T = O(kE)  k is the number of iterations of outer loop
+    ----------------------------------------------------------------------
+    Algorithm analysis
 
-    因为对于每个节点，都要求最短路径
-    输出：权重数组D（V个权重），V条路径
+    up to O(E) enqueue operations and up to O(V) dequeue operations
+    ----------------------------------------------------------------------
+    Single-source shortest path problem 
 
-    0 to 0  (0.00)
-    0 to 1  (0.93)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52   6->4 -1.25   4->5  0.35   5->1  0.32
-    0 to 2  (0.26)  0->2  0.26
-    0 to 3  (0.99)  0->2  0.26   2->7  0.34   7->3  0.39
-    0 to 4  (0.26)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52   6->4 -1.25
-    0 to 5  (0.61)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52   6->4 -1.25   4->5  0.35
-    0 to 6  (1.51)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52
-    0 to 7  (0.60)  0->2  0.26   2->7  0.34
+    finding the shortest paths from a given source vertex to all other vertices in the weighted digraph
+    input
+        a weighted digraph G=(V, E)
+        a single source vertex s ∈ V 
+    output
+        a set of V shortest path d(v) and corresponding weights
 """
-from collections import deque 
+from collections import deque
 class SPFA:
     def __init__(self, V: int=0, s: int=0, edges: list[tuple[int, int, int]]=None) -> None:
+        """O(VE) Shortest Path Faster Algorithm (SPFA) (Bellman Ford Moore) algorithm for single-source shortest path problem"""
         self.V = V                              # number of vertices in the weighted digraph
-        self.s = s                              # source vertex
-        self.edges = edges                      # edges[i] = (ui, vi, wi)
-        self.dist = [float('inf')] * self.V     # distTo[v] = distance  of shortest s->v path 距离数组：记录每个节点的最小权重和(最新最短路长度), 初始化除源节点外所有节点都为正无穷 10^9, 即未访问节点
-        self.dist[s] = 0
-        self.parent = [-1] * self.V             # 父节点数组：记录每个节点的父节点, 初始化都为-1，即不存在
-        self.adj = [[] for _ in range(self.V)]
+        self.s = s                              # the single source vertex
+        self.edges = edges                      # edge list, edges[i] = (ui, vi, wi)
+        self.dist = [float('inf')] * self.V     # distance array, dist[v] is distance/weights of shortest path from s to v
+        self.dist[s] = 0                        # initialization: all the vertices except source vertex is infinity, means unvisited
+        self.parent = [-1] * self.V            # parent array, parents[i] is parent vertex of vertex i, initialize as -1 means not exist
+        self.adj = [[] for _ in range(self.V)]  
+        self.in_queue = [False] * self.V        # self.in_queue[u] whether vertex [u] is enqueued
+
+        # O(V+E) build adjacency list from edge list
         for u, v, w in edges:
             self.adj[u].append((v, w))
-        
-        self.in_queue = [False] * self.V        # 布尔数组：记录节点是否入队
-        self.in_queue[s] = True 
 
-        self.relaxed_edges = 0
-
-        # 队列：初始化起点入队
-        self.q = deque([s])
-        while self.q:
-            u = self.q.popleft()  # 节点出队                       
-            self.in_queue[u] = False 
-            for v, w in self.adj[u]:
-                self.relax(u, v, w)  # relax operation                 
-
+        # O(VE)
+        self.in_queue[s] = True                 # mark source vertex as visited
+        self.queue = deque([s])                 # enqueue source vertex
+        while self.queue:
+            u = self.queue.popleft()            # O(1) dequeue vertex u                    
+            self.in_queue[u] = False            # mark vertex u as dequeued
+            for v, w in self.adj[u]:    
+                self.relax(u, v, w)             # O(1) relax operation/enqueue vertex v        
 
     def relax(self, u: int, v: int, w: int) -> None:
-        """松弛操作 O(1)  用于所有最短路算法
-            u: 当前节点; v: 邻接节点; w: 边(u, v)的权重
-            若起点s→v的最短路长度 大于 s→u + u→v的边长，选择 s→u→v 这条路
-            通过该操作，不断降低每个节点的最短路长度的上限，直到上限等于最短路长度
+        """O(1) Relaxation 
+        @Args 
+            u: neighbor vertex of vertex v (intermediate vertex)
+            v: target vertex
+            w: weight of edge u -> v
+            
+        used in all the shortest path algorithms
+        by relaxation, we lower the upper bound of distance of shortest path of each vertex, until they reached the true shortest distance.
+
+        if the path to v through u is shorter than the current shortest known path to v
+            dist(S, u) + dist(u, v) < dist(S, v) 
+        we choose go through/relax the edge u -> v, we update the path to be s -> u -> v
         """
         if self.dist[v] > (d := self.dist[u] + w):   # if the path can be shortened
-            self.dist[v] = d                         # 'relax' the long edge
+            self.dist[v] = d                         # 'relax' the edge u -> v
             self.parent[v] = u                       # update parent
             if not self.in_queue[v]:
-                self.q.append(v)
+                self.queue.append(v)                 # enqueue vertex v O(1)
                 self.in_queue[v] = True
-    
-    def hasNegativeCycle(self) -> bool:
-        """检查图是否存在负权环"""
-        # 若经过V-1次循环，还有边能松弛，即dist[u]没收敛，存在负权环
-        for u in range(self.V):                        
-            if not self.dist[u] == float('inf'):
-                for v, w in self.adj[u]:
-                    if self.dist[v] > self.dist[u] + w:      # should be false
-                        return True
-        return False        
-
-    def pathTo(self, v: int) -> list[int]:
-        """Returns the path from vertex s to vertex v"""
-        if self.hasNegativeCycle():
-            print("Has negative cycle")
-            return
-
+           
+    def pathTo(self, t: int) -> list[int]:
+        """O(V) Returns the path from source vertex s to target vertex t
+        
+        cases when the path does not exist: 
+        (1) target vertex t is not reachable from source vertex S
+        (2) vertex s or t is in the negative cycle
+        """
+        # case: no path from source vertex to vertex t
+        if self.dist[t] == float('inf'):
+            return 
         path = []
-        while v != self.s:
-            path.append(v)
-            v = self.parent[v]
-        path.append(self.s)
+        while True:
+            path.append(t)
+            if t == self.s:
+                break
+            t = self.parent[t]
         return path[::-1] 
 
-    def weight(self) -> list[int]:
-        """Returns the distance array"""
-        return self.dist 
-    
-    def allPath(self) -> list[list[int]]:
-        """Returns shortest paths from vertex s to each vertex in graph.
+    def distTo(self, t: int) -> float:
+        """O(1) return length of shortest path from source vertex s to target vertex t 
+
+        cases when the path does not exist: 
+        (1) vertex t is not reachable from vertex s
+        (2) vertex t or vertex s is in the negative cycle
+        """
+        # case: no path from source vertex to vertex t
+        if self.dist[t] == float('inf'):
+            return 
+        return self.dist[t]
+      
+    def allPaths(self) -> list[list[int]]:
+        """O(V^2) Returns shortest paths from a single source vertex s to each other vertex in the graph.
            
-           @return a list of length V, paths[v] is the shortest path from vertex s to vertex v"""
-        
-        if self.hasNegativeCycle():
-            print("Has negative cycle")
-            return
-        for v in range(self.V):   # 0 to 3 ( 0.99)  0->2  0.26   2->7  0.34   7->3  0.39
+           @return a list of length at most V, paths[v] is the shortest path from source vertex s to vertex v
+        """
+        paths = []
+        for v in range(self.V):   
             print(f"{self.s} to {v} ({self.dist[v]:.2f}): {self.pathTo(v)}")
-        
-        paths = [self.pathTo(v) for v in range(self.V)]
+            paths.append(self.pathTo(v))
         return paths 
 
 if __name__ == '__main__':
+    ###################################################### 
+    #  Example 1: positive weighted digraph
+    ######################################################
+    # print(f"SPFA Shortest Path")
 
-    edges = [(4, 5, 0.35), (5, 4, 0.35), (4, 7, 0.37), (5, 7, 0.28), 
-    (7, 5, 0.28), (5, 1, 0.32), (0, 4, 0.38),  (0, 2, 0.26), 
-    (7, 3, 0.39), (1, 3, 0.29), (2, 7, 0.34),
-    (6, 2, -1.20), (3, 6, 0.52), (6, 0, -1.40), (6, 4, -1.25)]
+    # V = 5   # V is number of vertics
+    # E = 5   # E is number of edges 
+    # s = 0   # a single source vertex
 
-    s = 0
-    g = SPFA(V=8, s=s, edges=edges)
-
-    print(f"SPFA Shortest Path")
-
-    print(g.allPath())
-
+    # edges = [
+    #     (0, 1, 2), 
+    #     (0, 2, 6), 
+    #     (0, 3, 7),
+    #     (1, 3, 3), 
+    #     (1, 4, 6),
+    #     (1, 4, 1), 
+    #     (2, 4, 1),
+    #     (3, 4, 5)
+    # ]
      
+    # print(f"Positive weighted digraph: V = {V}, E = {E}, edges = {edges}")
+    # g = SPFA(V=V, s=s, edges=edges)   # run SPFA algorithm
+    # print(f"All paths: {g.allPaths()}")
+    """
+    SPFA Shortest Path
+    Positive weighted digraph: V = 5, E = 5, edges = [(0, 1, 2), (0, 2, 6), (0, 3, 7), (1, 3, 3), (1, 4, 6), (1, 4, 1), (2, 4, 1), (3, 4, 5)]
+    pass 1: 6 edges are relaxed
+    pass 2: 0 edges are relaxed
+    0 to 0 (0.00): [0]
+    0 to 1 (2.00): [0, 1]
+    0 to 2 (6.00): [0, 2]
+    0 to 3 (5.00): [0, 1, 3]
+    0 to 4 (3.00): [0, 1, 4]
+    All paths: [[0], [0, 1], [0, 2], [0, 1, 3], [0, 1, 4]]
+    """
+
+
+    ###################################################### 
+    # Example 2: negative weighted digraph without negative cycle
+    ###################################################### 
+    # print(f"SPFA Shortest Path")
+
+    # V = 5   # V is number of vertics
+    # E = 5   # E is number of edges 
+    # s = 0   # a single source vertex
+
+    # edges = [
+    #     (0, 1, 1), 
+    #     (0, 2, 10), 
+    #     (1, 3, 2),
+    #     (2, 3, -10), 
+    #     (3, 4, 3)
+    # ]
+
+    # print(f"negative weighted digraph without negative cycle: V = {V}, E = {E}, edges = {edges}")
+    # g = SPFA(V=V, s=s, edges=edges)   # run SPFA algorithm
+    # print(f"All paths: {g.allPaths()}")
+
+    """
+    SPFA Shortest Path
+    negative weighted digraph without negative cycle: V = 5, E = 5, edges = [(0, 1, 1), (0, 2, 10), (1, 3, 2), (2, 3, -10), (3, 4, 3)]
+    pass 1: 5 edges are relaxed
+    pass 2: 0 edges are relaxed
+    0 to 0 (0.00): [0]
+    0 to 1 (1.00): [0, 1]
+    0 to 2 (10.00): [0, 2]
+    0 to 3 (0.00): [0, 2, 3]
+    0 to 4 (3.00): [0, 2, 3, 4]
+    All paths: [[0], [0, 1], [0, 2], [0, 2, 3], [0, 2, 3, 4]]
+    """
+
+
+    ###################################################### 
+    # Example 3: weighted digraph with negative cycle (1 -> 2 -> 1)
+    ###################################################### 
+    print(f"SPFA Shortest Path")
+    
+    V = 5   # V is number of vertics
+    E = 5   # E is number of edges
+    s = 0   # a single source vertex
+
+
+    edges = [
+        (0, 1, 99), 
+        (0, 4, -99), 
+        (1, 2, 15),
+        (2, 1, -42), 
+        (2, 3, 10)
+    ]
+
+    print(f"weighted digraph with negative cycle: V = {V}, E = {E}, edges = {edges}")
+    g = SPFA(V=V, edges=edges)    # run SPFA algorithm
+    print(f"All paths: {g.allPaths()}")
+    """
+    SPFA can't deal with graph with negative cycle
+    """

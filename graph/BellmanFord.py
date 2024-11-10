@@ -1,122 +1,267 @@
-"""Bellman Ford's algorithm  O(VE)
-    最短路问题的通用版本
-    T: 最坏 O(VE) 最好 O(kE)  k: 外循环次数
-    Computes the shortest path tree in edge-weighted digraph G from vertex s, 
-    or finds a negative weight cycle
+"""Bellman Ford's algorithm for Single-source shortest path problem 
+    https://algs4.cs.princeton.edu/44sp/BellmanFordSP.java.html
+    T: O(VE)
+    S: O(V)  edge list
 
-    单源最短路问题
-    定义：给定一个有向加权图G(V, E)，从一个节点s到另一个节点u的最短路径，最短指权重之和最小。
+    applied to graph with positive weights, or graph with negative weights but no negative cycle
+    ----------------------------------------------------------------------
+    Variants of Bellman Ford algorithm
 
-    输入：一个有向加权图G(V, E), 一个源节点 s ∈ V 
-    输出：权重δ(s, u), 1条路径
+    standard Bellman Ford: T = O(VE)
+    SPFA: queue-optimized T = O(kE)  k is the number of iterations of outer loop
+    ----------------------------------------------------------------------
+    Bellman-Ford killer
 
-    因为对于每个节点，都要求最短路径
-    输出：权重数组D（V个权重），V条路径
+    requires the algorithm to perform the maximum number of iterations: V-1
+    e.g., a singly linked list   v0 -> v1 -> v2 -> ... -> vn
+    graph structure: the shortest path from the source to the ‘furthest’ vertex has at most V-1 edges.
+    vertices can be ordered (v1, v2, …, vn) such that for every edge (vi, vj), we have i < j. 
+    ----------------------------------------------------------------------
+    Dynamic programming
 
-    0 to 0  (0.00)
-    0 to 1  (0.93)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52   6->4 -1.25   4->5  0.35   5->1  0.32
-    0 to 2  (0.26)  0->2  0.26
-    0 to 3  (0.99)  0->2  0.26   2->7  0.34   7->3  0.39
-    0 to 4  (0.26)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52   6->4 -1.25
-    0 to 5  (0.61)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52   6->4 -1.25   4->5  0.35
-    0 to 6  (1.51)  0->2  0.26   2->7  0.34   7->3  0.39   3->6  0.52
-    0 to 7  (0.60)  0->2  0.26   2->7  0.34
+        breaks this problem down into simpler overlapping subproblems 
+        for all i from 1 to V−1, finding the shortest path using at most i edges 
+        using the solutions to these subproblems to build up the solution to the original problem. 
+        results are stored in a table (distance array) to avoid redundant computation.
+
+    1. Initialize array: dp = [inf] * V  a 1D array of length V, set all the distances as infinity
+    2. State definition: dp[u]: shortest distance from source vertex to vertex u
+    3. state transition equation: dp[u] = min(dp[u], dp[v]+dist(v, u))   relax the edge v -> u
+    4. set initial state: dp[s] = 0  set the shortest distance to source vertex as 0
+    5. set return value: dp
+    ----------------------------------------------------------------------
+    Negative Cycle Detection: 
+
+        After V-1 passes, Perform relaxation for all edges one more time. 
+        If a shorter path can be found for any vertex, a negative weight cycle exists 
+    ----------------------------------------------------------------------
+    Single-source shortest path problem 
+
+    finding the shortest paths from a given source vertex to all other vertices in the weighted digraph without negative cycles 
+
+    for graph with negative cycle, those vertices that are NOT reachable from the negative cycle, we can still compute the shortest path
+
+    input
+        a weighted digraph without negative cycles G=(V, E)
+        a single source vertex s ∈ V 
+    output
+        a set of V shortest path d(v) and corresponding weights
 """
 class BellmanFord:
     def __init__(self, V: int=0, s: int=0, edges: list[tuple[int, int, int]]=None) -> None:
+        """O(VE) Bellman Ford's algorithm for Single-source shortest path problem"""
         self.V = V                              # number of vertices in the weighted digraph
-        self.s = s                              # source vertex
-        self.edges = edges                      # edges[i] = (ui, vi, wi)
-        self.dist = [float('inf')] * self.V     # distTo[v] = distance  of shortest s->v path 距离数组：记录每个节点的最小权重和(最新最短路长度), 初始化除源节点外所有节点都为正无穷 10^9, 即未访问节点
-        self.dist[s] = 0
-        self.parent = [-1] * self.V             # 父节点数组：记录每个节点的父节点, 初始化都为-1，即不存在
-        self.adj = [[] for _ in range(self.V)]
-        for u, v, w in edges:
-            self.adj[u].append((v, w))
+        self.s = s                              # the single source vertex
+        self.edges = edges                      # edge list, edges[i] = (ui, vi, wi)
+        self.dist = [float('inf')] * self.V     # distance array, dist[v] is distance/weights of shortest path from s to v, initialize to infinitely large (all the vertices haven't visited)
+        self.dist[s] = 0                        # initialize distance of source vertex to itself to 0
+        self.parents = [-1] * self.V            # parent array, parents[i] is parent node of node i, 初始化都为-1，即不存在
 
-        self.modified = False 
-        self.relaxed_edges = 0
+        # at most V-1 relaxation: the longest possible shortest path without a cycle can have at most V-1 edges
+        for _ in range(self.V - 1):     # O(V)                 
+            for u, v, w in self.edges:  # O(E) traverse all the edges u -> v 
+                self.relax(u, v, w)     # try relax the edge from u to v
+                self.relax(v, u, w)     # if graph is undirected, also try relax the edge from v to u
 
-        # 遍历所有边V-1次（最多），当距离数组不变时，停止循环
-        for i in range(self.V - 1):                      
+        ###### Optimized version O(kE)  k = number of iterations in the outer-loop  #######
+        for _ in range(self.V - 1):                      
             self.modified = False   
-            self.relaxed_edges = 0                      # 记录每次大循环松弛的边数   
+            for u, v, w in self.edges:  
+                # try relax the edge from u to v
+                # Optimization 1: skip unvisited vertex
+                if self.dist[u] != float('inf'): 
+                    self.relax(u, v, w)     
+                # if graph is undirected, also try relax the edge from v to u
+                if self.dist[v] != float('inf'):  
+                    self.relax(v, u, w)
 
-            for u, v, w in self.edges:                  # 遍历所有边 O(E)
-                if not self.dist[u] == float('inf'):    # 若节点u的最短路不是正无穷，用u更新节点v
-                    self.relax(u, v, w)             
-            
-            print(f"pass {i+1}: {self.relaxed_edges} edges are relaxed")
-            
-            # Optimization: if self.dist converges, end outer loop
+            # Optimization 2: exit outer loop if distance array converges
             if not self.modified: 
                 break                 
 
 
     def relax(self, u: int, v: int, w: int) -> None:
-        """松弛操作 O(1)  用于所有最短路算法
-            u: 当前节点; v: 邻接节点; w: 边(u, v)的权重
-            若起点s→v的最短路长度 大于 s→u + u→v的边长，选择 s→u→v 这条路
-            通过该操作，不断降低每个节点的最短路长度的上限，直到上限等于最短路长度
+        """O(1) Relaxation
+        @Args
+        u: neighbor node of node v (intermediate node)
+        v: target node
+        w: weight of edge u -> v
+        
+        used in all the shortest path algorithms
+        by relaxation, we lower the upper bound of distance of shortest path of each node, until they reached the true shortest distance.
+
+        if the path to v through u is shorter than the current shortest known path to v
+            dist(s, u) + dist(u, v) < dist(s, v) 
+        we choose go through/relax the edge u -> v, we update the path to be s -> u -> v
         """
-        if self.dist[v] > (d := self.dist[u] + w):   # if the path can be shortened
-            self.dist[v] = d                         # 'relax' the long edge
-            self.parent[v] = u                            # update parent
-            self.modified = True
-            self.relaxed_edges += 1
+        # case 1: the path can't be shortend
+        if self.dist[v] <= self.dist[u] + w:
+            return
+        self.dist[v] = self.dist[u] + w          # 'relax' the edge u -> v
+        self.parents[v] = u                      # update parent
+        self.modified = True                     # the path is updated
+        self.relaxed_edges += 1                  # increment number of relaxed edges
     
     def hasNegativeCycle(self) -> bool:
-        """检查图是否存在负权环"""
-        # 若经过V-1次循环，还有边能松弛，即dist[u]没收敛，存在负权环
-        for u in range(self.V):                        
-            if not self.dist[u] == float('inf'):
-                for v, w in self.adj[u]:
-                    if self.dist[v] > self.dist[u] + w:      # should be false
-                        return True
-        return False        
+        """O(E) negative cycle detection
 
-    def pathTo(self, v: int) -> list[int]:
-        """Returns the path from vertex s to vertex v"""
-        if self.hasNegativeCycle():
-            print("Has negative cycle")
-            return
+            return whether input graph contains AT LEAST ONE negative weight cycle reachable from the source vertex s.
+            perform one more relaxation step after V-1 passes of relaxation in the initialization, 
+            if at least one edge can be relaxed, then there exists a negative-weight cycle reachable from the source vertex s.
+        """
+        for u, v, w in self.edges:
+            if self.dist[u] != float('inf') and self.dist[v] > self.dist[u] + w:  
+                return True 
+        return False         
 
+    def pathTo(self, t: int) -> list[int]:
+        """O(V) Returns the path from source vertex s to target vertex t
+        
+        Cases when the path does not exist: 
+        (1) target vertex t is not reachable from source vertex s
+        (2) vertex s or t is in the negative cycle
+        """
+        # case 1: target vertex t is not reachable from source vertex s
+        if self.dist[t] == float('inf'):
+            return 
+        # rebuild path from target vertex t
         path = []
-        while v != self.s:
-            path.append(v)
-            v = self.parent[v]
-        path.append(self.s)
-        return path[::-1] 
+        while True:
+            path.append(t)
+            if t == self.s:
+                break
+            t = self.parents[t]
+        return path[::-1]   # reverse path
 
-    def weight(self) -> list[int]:
-        """Returns the distance array"""
-        return self.dist 
-    
-    def allPath(self) -> list[list[int]]:
-        """Returns shortest paths from vertex s to each vertex in graph.
+    def distTo(self, t: int) -> float:
+        """O(1) return length of shortest path from source vertex s to target vertex t 
+
+        cases when the path does not exist: 
+        (1) vertex t is not reachable from vertex s
+        (2) vertex t or vertex s is in the negative cycle
+        """
+        # case 1: target vertex t is not reachable from source vertex s
+        if self.dist[t] == float('inf'):
+            return 
+        return self.dist[t]
+        
+    def allPaths(self) -> list[list[int]]:
+        """O(V^2) Returns shortest paths from a single source vertex s to each other vertex in the graph.
            
-           @return a list of length V, paths[v] is the shortest path from vertex s to vertex v"""
-        
+           @return a list of length at most V, paths[v] is the shortest path from source vertex s to vertex v
+        """
+        # case 1: graph has negative cycle, no paths is found
         if self.hasNegativeCycle():
-            print("Has negative cycle")
-            return
-        for v in range(self.V):   # 0 to 3 ( 0.99)  0->2  0.26   2->7  0.34   7->3  0.39
-            print(f"{self.s} to {v} ({self.dist[v]:.2f}): {self.pathTo(v)}")
+            print("Graph contains negative cycles.")
+            return 
         
-        paths = [self.pathTo(v) for v in range(self.V)]
+        paths = []
+        for v in range(self.V):   
+            print(f"{self.s} to {v} ({self.dist[v]:.2f}): {self.pathTo(v)}")
+            paths.append(self.pathTo(v))
         return paths 
 
 if __name__ == '__main__':
+    ###################################################### 
+    #  Example 1: positive weighted digraph
+    ######################################################
+    # print(f"BellmanFord Shortest Path")
 
-    edges = [(4, 5, 0.35), (5, 4, 0.35), (4, 7, 0.37), (5, 7, 0.28), 
-    (7, 5, 0.28), (5, 1, 0.32), (0, 4, 0.38),  (0, 2, 0.26), 
-    (7, 3, 0.39), (1, 3, 0.29), (2, 7, 0.34),
-    (6, 2, -1.20), (3, 6, 0.52), (6, 0, -1.40), (6, 4, -1.25)]
+    # V = 5   # V is number of vertics
+    # E = 5   # E is number of edges 
+    # s = 0   # a single source vertex
 
-    s = 0
-    g = BellmanFord(V=8, s=s, edges=edges)
-
-    print(f"BellmanFord Shortest Path")
-
-    print(g.allPath())
+    # edges = [
+    #     (0, 1, 2), 
+    #     (0, 2, 6), 
+    #     (0, 3, 7),
+    #     (1, 3, 3), 
+    #     (1, 4, 6),
+    #     (1, 4, 1), 
+    #     (2, 4, 1),
+    #     (3, 4, 5)
+    # ]
      
+    # print(f"Positive weighted digraph: V = {V}, E = {E}, edges = {edges}")
+    # g = BellmanFord(V=V, s=s, edges=edges)   # run Bellman-Ford algorithm
+    # print(f"All paths: {g.allPaths()}")
+    """
+    BellmanFord Shortest Path
+    Positive weighted digraph: V = 5, E = 5, edges = [(0, 1, 2), (0, 2, 6), (0, 3, 7), (1, 3, 3), (1, 4, 6), (1, 4, 1), (2, 4, 1), (3, 4, 5)]
+    pass 1: 6 edges are relaxed
+    pass 2: 0 edges are relaxed
+    0 to 0 (0.00): [0]
+    0 to 1 (2.00): [0, 1]
+    0 to 2 (6.00): [0, 2]
+    0 to 3 (5.00): [0, 1, 3]
+    0 to 4 (3.00): [0, 1, 4]
+    All paths: [[0], [0, 1], [0, 2], [0, 1, 3], [0, 1, 4]]
+    """
+
+
+    ###################################################### 
+    # Example 2: negative weighted digraph without negative cycle
+    ###################################################### 
+    # print(f"BellmanFord Shortest Path")
+
+    # V = 5   # V is number of vertics
+    # E = 5   # E is number of edges 
+    # s = 0   # a single source vertex
+
+    # edges = [
+    #     (0, 1, 1), 
+    #     (0, 2, 10), 
+    #     (1, 3, 2),
+    #     (2, 3, -10), 
+    #     (3, 4, 3)
+    # ]
+
+    # print(f"negative weighted digraph without negative cycle: V = {V}, E = {E}, edges = {edges}")
+    # g = BellmanFord(V=V, s=s, edges=edges)   # run Bellman-Ford algorithm
+    # print(f"All paths: {g.allPaths()}")
+
+    """
+    BellmanFord Shortest Path
+    negative weighted digraph without negative cycle: V = 5, E = 5, edges = [(0, 1, 1), (0, 2, 10), (1, 3, 2), (2, 3, -10), (3, 4, 3)]
+    pass 1: 5 edges are relaxed
+    pass 2: 0 edges are relaxed
+    0 to 0 (0.00): [0]
+    0 to 1 (1.00): [0, 1]
+    0 to 2 (10.00): [0, 2]
+    0 to 3 (0.00): [0, 2, 3]
+    0 to 4 (3.00): [0, 2, 3, 4]
+    All paths: [[0], [0, 1], [0, 2], [0, 2, 3], [0, 2, 3, 4]]
+    """
+
+
+    ###################################################### 
+    # Example 3: weighted digraph with negative cycle (1 -> 2 -> 1)
+    ###################################################### 
+    print(f"BellmanFord Shortest Path")
+    
+    V = 5   # V is number of vertics
+    E = 5   # E is number of edges
+    s = 0   # a single source vertex
+
+
+    edges = [
+        (0, 1, 99), 
+        (0, 4, -99), 
+        (1, 2, 15),
+        (2, 1, -42), 
+        (2, 3, 10)
+    ]
+
+    print(f"weighted digraph with negative cycle: V = {V}, E = {E}, edges = {edges}")
+    g = BellmanFord(V=V, edges=edges)    # run Bellman-Ford algorithm
+    print(f"All paths: {g.allPaths()}")
+    """
+    BellmanFord Shortest Path
+    weighted digraph with negative cycle: V = 5, E = 5, edges = [(0, 1, 99), (0, 4, -99), (1, 2, 15), (2, 1, -42), (2, 3, 10)]
+    pass 1: 5 edges are relaxed
+    pass 2: 3 edges are relaxed
+    pass 3: 3 edges are relaxed
+    pass 4: 3 edges are relaxed
+    Has negative cycle
+    All paths: None
+    """

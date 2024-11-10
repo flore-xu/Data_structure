@@ -1,85 +1,114 @@
 """
 Kruskal's algorithm for Minimal spanning tree problem
 
-T: O(ElogE) S: O(E)
+https://algs4.cs.princeton.edu/43mst/KruskalMST.java.html
+T: O(ElogE) 
+S: O(V+E)    O(V) for parent array and rank array in union find disjoint set. 
+             O(E) for sorted edges array
 
-MST 定义：给定一个连通无向加权图G， MST是包含G全部节点的权重总和最小的连通子图，即一棵有N个节点和N-1条边的树
+1. initialize V MSTs, treating each vertex in the graph as a separate MST. 
+2. combines 2 MSTs by adding the smallest edge between them
+3. repeat step2 until all vertices are included in a single MST. 
 
-输入：连通无向加权图G
+MST definition: 
+1. a tree of V vertices and V-1 edges
+2. connected subgraph of G with smallest total weights containing all the vertices
 
-输出：二选一 (1) MSTs 不唯一 (2) 最小权重
+input: connected undirected weighted graph G
+output: either of (1) MSTs (not unique) (2) minimum weights
 """
-
 class UnionFind:                                
-    def __init__(self, N):
-        self.parent = [i for i in range(N)]
-        self.rank = [0 for i in range(N)]
-        self.setSize = [1 for i in range(N)]
-        self.numSets = N
+    def __init__(self, n: int) -> None:
+        """
+        build n disjoint sets from n vertices
+        T: O(N)
+        """
+        self.parents = list(range(n))    # S: O(V) parrent array: parent vertex of each vertex
+        self.ranks = [0] * n            # rank array: max height of each vertex
+        self.sizeSets = [1] * n         # size of each disjoint set
+        self.numSets = n                # number of disjoint sets
 
-    def findSet(self, i):
-        if self.parent[i] == i:
+    def findSet(self, i: int) -> int:
+        """return root of vertex i's set
+           T: amortized O(α(N))  effectively O(1)
+             first O(N) then O(1)
+           path-compression  
+           Recursion
+        """
+        if self.parents[i] == i:
             return i
         else:
-            self.parent[i] = self.findSet(self.parent[i])
-            return self.parent[i]
+            self.parents[i] = self.findSet(self.parents[i])
+            return self.parents[i]
 
-    def isSameSet(self, i, j):
+    def isSameSet(self, i: int, j: int) -> bool:
+        """return whether vertex i and j is in the same set
+           T: O(α(N) first O(N) then O(1)
+        """
+        # path compression twice
         return self.findSet(i) == self.findSet(j)
 
-    def unionSet(self, i, j):
-        if (not self.isSameSet(i, j)):
-            self.numSets -= 1
-            x = self.findSet(i)
-            y = self.findSet(j)
-
-        # rank is used to keep the tree short
-        if (self.rank[x] > self.rank[y]):
-            self.parent[y] = x
-            self.setSize[x] += self.setSize[y]
+    def unionSet(self, i: int, j: int) -> None:
+        """if vertice i and j are from two disjoint sets, union this two sets
+           union by rank   shorter tree as subtree of higher tree
+           T: amortized O(α(N))  effectively O(1)
+             first O(N) then O(1)
+        """
+        # base case: two vertices are from the same set
+        # indirect path-compression   call findSet() twice
+        if self.isSameSet(i, j):
+            return
+        ip, jp = self.findSet(i), self.findSet(j)
+        # case 1: tree i is shortest than j, connect i to root of j, rank of new tree remains unchanged
+        if self.ranks[ip] < self.ranks[jp]:
+            self.parents[ip] = jp
+            self.sizeSets[jp] += self.sizeSets[ip]
+        # case 2: tree j is shortest than i, connect j to root of i, rank of new tree remains unchanged
+        elif self.ranks[jp] < self.ranks[ip]:
+            self.parents[jp] = ip
+            self.sizeSets[ip] += self.sizeSets[jp]
+        # case 3: two trees of equal height, choose either method, increment rank of new tree
         else:
-            self.parent[x] = y
-            self.setSize[y] += self.setSize[x]
+            self.parents[jp] = ip
+            self.sizeSets[ip] += self.sizeSets[jp]
+            self.ranks[ip] += 1     # increment rank of new tree
+        self.numSets -= 1           # decrement number of disjoint sets
 
-            if (self.rank[x] == self.rank[y]):
-                self.rank[y] += 1
+    def sizeOfSet(self, i: int) -> int:
+        """O(1) return size of disjoint set containing vertex i"""
+        return self.sizeSets[self.findSet(i)]
 
-    def numDisjointSets(self):
+    def numDisjointSets(self) -> int:
+        """O(1) return number of disjoint sets"""
         return self.numSets
-
-    def sizeOfSet(self, i):
-        return self.setSize[self.findSet(i)]
 
 
 class KruskalMST:
-    def __init__(self, v: int, list[tuple[int, int, int]]) -> None:
+    def __init__(self, v: int, edges: list[tuple[int, int, int]]) -> None:
         """Compute a MST for a undirected weighted graph
            T: O(ElogE) S: O(E)
         """
-        self.V = v                              # number of vertices
+        self.V = v                              # total number of vertices
         self.weight = 0                         # total cost
-        self.edges = []                           # edges of MST. edges[i]: (u, v, w) w: weight, u and v: nodes         
-    
-        num_taken = 0           # 已用边数为0
-        UF = UnionFind(self.V)  # 初始化并查集：V个孤立节点
+        self.edges = []                         # edges of MST. edges[i]: (u, v, w) w: weight, u and v: vertices         
+        num_taken = 0           # number of taken edges
+        UF = UnionFind(self.V)  # initialize union find disjoint set with V isolated vertices
 
-        # Step 1 O(E log E): 按权重对边升序排序  bottleneck .Sorting key: weight, small node, large node
+        # 1. O(E log E) sorting by weight ascendingly and small vertex and large vertex
         edges = sorted([(w, u, v) for u, v, w in edges])                                      
 
-        # Step 2 O(V): 遍历每条边 
+        # 2. O(E) union and find  
         for w, u, v in edges: 
-            # 当已用V-1条边时，立即结束遍历                             
+            # base case 1: V-1 edges are taken, exit iterating edges                          
             if num_taken == self.V - 1:
                 break
-
-            # cycle check: 判断加入这条边是否会形成一个环，O(1) 
-            # 若不会成环，加入该边
-            if not UF.isSameSet(u, v):      
-                UF.unionSet(u, v)           # 连接2个节点成边 O(1)     
-                num_taken += 1              # 已用边数加1
-                self.weight += w            # 总权重加weight
-                self.edges.append((u, v, w))  # 该边加入MST
-
+            # base case 2: O(1) a cycle will be formed by adding this edge
+            if UF.isSameSet(u, v):    
+                continue   
+            UF.unionSet(u, v)               # O(1) connect two vertices u and v by an edge   
+            num_taken += 1                  # increment number of edges taken
+            self.weight += w                # update total weightes
+            self.edges.append((u, v, w))    # add this edge to MST
         # return self.weight, self.edges 
 
 

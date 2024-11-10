@@ -1,19 +1,35 @@
 """
 Prim's algorithm for Minimal spanning tree problem
+https://algs4.cs.princeton.edu/43mst/PrimMST.java.html
+T = O(ElogV)   
+S = O(E) for min-heap
 
-T = O(E logV) S = O(V)
+1. initialize a MST with a random vertex
+2. find all the edges of the MST that connect to new vertices (fringe vertex)
+3. add smallest edge to the MST
+4. repeat 2-3 until all vertices are visited
 
-MST 定义：给定一个连通无向加权图G， MST是包含G全部节点的权重总和最小的连通子图，即一棵有N个节点和N-1条边的树
+MST definition: 
+1. a tree of V vertices and V-1 edges
+2. connected subgraph of G with smallest total weights containing all the vertices
 
-输入：连通无向加权图G
-
-输出：二选一 (1) MSTs 不唯一 (2) 最小权重
+input: connected undirected weighted graph G
+output: either of (1) MSTs (not unique) (2) minimum weights
 """
-
 from heapq import heappush, heappop
 
 class PrimMST:
     def __init__(self, V: int=0, edges: list[tuple[int, int, int]]=None) -> None:
+        def process(v: int) -> None:
+            """O(logV) push adjacent vertices of vertex v into min-heap"""
+            # base case: vertex is visited
+            if visited[v]:
+                return  
+            visited[v] = True 
+            for u, w in self.adj[v]:
+                heappush(heap, (w, u, v))
+
+        # 1. build adajcency list
         self.V = V 
         self.weight = 0
         self.edges = []
@@ -21,31 +37,25 @@ class PrimMST:
         for u, v, w in edges:
             self.adj[u].append((v, w))
             self.adj[v].append((u, w))
-
-        def process(v: int) -> None:
-            """访问节点u, 将u的邻边全部入堆 O(logV)"""
-            visited[v] = True 
-            for u, w in self.adj[v]:
-                if not visited[u]:
-                    heappush(pq, (w, u, v))
-
-        visited = [False] * self.V    # 布尔数组：记录节点是否已访问，防止成环
         
-        pq = []                       # 最小堆: 元素 (weight, neighbor_node)  每个节点入堆一次           
-        num_taken = 0                 # 已用边数
-        # step 1: 从源节点出发，通常为0                      
-        process(0) 
+        # 2. Prim's algorithm 
+        heap = []                     # min-heap: element is tuple (weight, neighbor_node)  each vertex will be pushed into heap once          
+        num_taken = 0                 # number of taken edges
+        visited = [False] * self.V    # records visited states of vertices to avoid cycle
+        
+        # O(logV) initialize a MST with a random source vertex 
+        # push all the adjacent edges of vertex 0 into the min-heap
+        process(0)   
 
-        # step 2: 当队列非空且已用边数小于总边数时 O(E)
-        while pq and num_taken < self.V - 1: 
-            w, u, v = heappop(pq)   # 贪心：最小权重的边出堆 O(logV)
-            
-            if not visited[u]:      # 若与该边相连的节点未访问，用该边，否则不用                      
-                num_taken += 1                         
-                self.weight += w 
-                self.edges.append((u, v, w))                         
-                process(u)          # 节点的所有邻接边入堆   O(logV)
-
+        while heap and num_taken < self.V - 1: # O(E) exit when all the vertices are visited and all the edges are taken
+            w, u, v = heappop(heap)   # O(logV) greedy, pop edge with smallset weight 
+            # base case: vertex u connected to edge is visited, don't use thie edge
+            if visited[u]:
+                continue                       
+            num_taken += 1                 # increment number of taken edges of MST          
+            self.weight += w               # update total weights of MST
+            self.edges.append((u, v, w))   # update edge list of MST                    
+            process(u)                     # O(logV) push all the adjacent edges of vertex u into the min-heap  
         # return self.weight, self.edges    
 
 if __name__ == '__main__':

@@ -1,358 +1,535 @@
 """
-   An undirected graph, implemented using an array of lists.
+   An undirected graph
    Parallel edges and self-loops allowed.
  """
 from collections import deque
+from functools import lru_cache
 
 class UndirectedGraph:
-
     def __init__(self, v: int, edges: list[tuple[int, int]]) -> None:
-        """Initialize an empty undirected graph with v vertices and 0 edges."""
-        self.V = v                              # number of vertices
-        self.E = len(edges)                     # number of edges
-        self.adj = [[] for _ in range(self.V)]  # adjacency list of graph
-
-        # construct adjacency list
-        for v, w in edges:
-            self.add_edge(v, w)
-
+        """O(V+E) Initialize an empty undirected graph with v vertices and 0 edges.
+        """
+        self.V = v                                          # number of vertices
+        self.E = 0                                          # number of edges
+        self.edges = edges                                  # edge list of a graph
+        self.adjList = [[] for _ in range(self.V)]          # adjacency list of graph
+        self.adjMat = [[0]*self.V for _ in range(self.V)]   # adjacency matrix of a graph
+        self.degree = [0] * self.V                          # degree[i]: degree of vertex i
+        # O(E) construct adjacency list, adajcency matrix, degree array
+        for v, u in edges:
+            self.add_edge(v, u)
 
     def __str__(self) -> str:
-        """Returns an edge list representation of graph"""
+        """Returns an edge list representation of graph O(V+E)"""
         s = f"{self.V} vertices, {self.E} edges"
 
         for v in range(self.V):   # print vertex v and its neighbors
-            s += "\n" + f"{v}: {' '.join(str(w) for w in self.adj[v])}"
+            s += "\n" + f"{v}: {' '.join(str(u) for u in self.adjList[v])}"
 
         return s
 
-    def add_edge(self, v: int, w: int) -> None:
-        """adds the undirected edge v-w to this graph"""
-        self.adj[v].append(w)
-        self.adj[w].append(v)
+    def add_edge(self, v: int, u: int) -> None:
+        """O(1) adds the undirected edge v-u to this graph O(1)"""
+        self.adjList[v].append(u)
+        self.adjList[u].append(v)
+        self.adjMat[v][u] = 1
+        self.adjMat[u][v] = 1
         self.E += 1 
-
+        self.degree[v] += 1
+        self.degree[u] += 1
 
     def degree(self, v: int) -> int:
-        """Returns the degree of vertex v"""
+        """O(1) Returns the degree of vertex v"""
         if not (0 <= v < self.V):
             raise IndexError(f"Vertex {v} is not between 0 and {self.V-1}")
-        return len(self.adj[v])
-
-    def max_degree(self) -> int:
-        """Returns the max degree of vertex in graph"""
-        max_deg = 0
-        for v in self.V:
-            max_deg = max(max_deg, self.degree(v))
-        return max_deg
-
+        return self.degree[v]  # len(self.adjList[v])
+    
     def hasSelfLoop(self) -> bool:
-        """Does the graph have a self-loop?"""
+        """O(V+E) self-loop detection"""
         for v in range(self.V):
-            for w in self.adj[v]:
-                if w == v:
+            for u in self.adjList[v]:
+                if u == v:
                     return True 
-        return False 
+        return False  
+
+    def allSelfLoops(self) -> list[int]:
+        """O(V+E) Returns the all the self-loops in the undirected graph"""
+        selfloops = set()
+        for v in range(self.V):
+            for u in self.adjList[v]:
+                if u == v:
+                    selfloops.add(u)
+        return list(selfloops)
+
+    def hasParallelEdges(self) -> bool:
+        """O(V+E) Parallel edges detection"""
+        visited = [False] * self.V 
+        for v in range(self.V):
+            # check parallel edges incident on v 
+            for u in self.adjList[v]:
+                if visited[u]:
+                    return True 
+                visited[u] = True 
+            # reset visited[u] = False for all u
+            for u in self.adjList[v]:
+                visited[u] = False
+        return False
+
+    def isConneted(self) -> bool:
+        """O(V+E) Check graph connectivity"""
+        def dfs(v: int) -> None:
+            """traverse the CC containing vertex v""" 
+            visited[v] = True 
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    dfs(u)
+        
+        def bfs(v: int) -> list[int]:
+            """traverse the CC containing vertex v"""
+            queue = deque([v])
+            visited[v] = True 
+            while queue:
+                v = queue.popleft() 
+                for u in self.adjList[v]:
+                    if not visited[u]: 
+                        queue.append(u)
+                        visited[u] = True 
+
+        visited = [False] * self.V
+        dfs(0)          # bfs(0)  choose start vertex 0 or random.choice(range(self.V))
+        return sum(visited) == self.V 
+
+
+    def allCCs(self) -> list[tuple[list, int, int]]:
+        """O(V+E) Returns all the connected components (CC) of a graph
+           https://algs4.cs.princeton.edu/41graph/CC.java.html
+           @return CCs: a 2D array of length the number of CCs, 
+                   CCs[i][0]: an array of all the vertices in ith CC.
+                   CCs[i][1]: number of vertices in ith CC
+                   CCs[i][2]: number of edges in ith CC
+        """
+        def dfs(v: int) -> tuple[int, int]:
+            """return number of vertices in the CC, number of edges in the CC"""              
+            nonlocal CCId
+            visited[v] = CCId
+            
+            CC, V, E = [v], 1, 0
+            for u in self.adjList[v]:
+                if visited[u] == -1:
+                    cc, v, e = dfs(u) 
+                    CC += cc 
+                    V += v 
+                    E += 1 + e   # 1 accounts for edge (v, u)
+            return CC, V, E
+
+        def bfs(v: int) -> tuple[int, int]:
+            """return number of vertices in the CC, number of edges in the CC"""
+            nonlocal CCId
+            queue = deque([v])
+            visited[v] = CCId
+
+            CC, V, E = [v], 1, 0
+            while queue:
+                v = queue.popleft()
+                for u in self.adjList[v]:
+                    E += 1
+                    if visited[u] == -1: 
+                        queue.append(u)
+                        CC.append(u)
+                        V += 1
+                        visited[u] = CCId
+            return CC, V, E
+
+        def isConnected(self, v: int, u: int) -> bool:
+            """return whether two vertices are connected"""
+            return visited[v] == visited[u]   
+
+        CCId = 0                    # index of CC
+        visited = [-1] * self.V     # visited[v]: CC index which vertex v is in
+        CCs = []
+        # 1. O(V+E) perform DFS/BFS of graph
+        for v in range(self.V):
+            if visited[v] == -1:
+                CCs.append(dfs(v))  # bfs(v) 
+                CCId += 1
+
+        # # 2. O(V) map each vertex to corresponding CC
+        # CCs = [[] for _ in range(CCId)]
+        # for v in range(self.V):
+        #     CCs[visited[v]].append(v)
+        return CCs   
+
     
     def hasCycle(self) -> bool:
-        """Cycle detection. 
-           @Return True if the graph has a cycle, False otherwise
-        """
-
-        def dfs(v: int, parent: int) -> bool:
-            """Detect cycle in subgraph reachable from vertex v
-               @param v: start vertex   parent: parent vertex of v
+        """O(V+E) Cycle detection"""     
+        def dfs(v: int, p: int) -> bool:
+            """Cycle detection in the subgraph reachable from vertex v
+               @param v, p: current/parent vertex 
+               https://algs4.cs.princeton.edu/41graph/Cycle.java.html  
             """ 
-            visited[v] = True 
+            visited[v] = True   # mark vertex as visited
 
-            for w in self.adj[v]:
-                if not visited[w] and dfs(w, v):
-                    return True 
-                elif w != parent:
+            for u in self.adjList[v]:
+                if visited[u]:
+                    if u == p:
+                        continue 
+                    else:
+                        return True 
+                if dfs(u, v): 
                     return True 
             return False 
+
+        def bfs(v: int, p: int) -> bool:
+            """Cycle detection in the subgraph reachable from vertex v
+               @param v, p: current/parent vertex 
+            """ 
+            queue = deque([(v, p)])
+            visited[v] = True 
+            while queue:
+                v, p = queue.popleft()
+                for u in self.adjList[v]:
+                    if visited[u]:
+                        if u == p:
+                            continue 
+                        else:
+                            return True 
+                    queue.append((u, v))
+                    visited[u] = True 
+            return False
         
         # special case: identify parallel edge as a cycle
         if self.hasParallelEdges():
             return True 
+        
         visited = [False] * self.V 
         for v in range(self.V):
-            if not visited[v] and dfs(v, -1):
+            if visited[v]:
+                continue 
+            if dfs(v, -1):  # change here to use bfs(v, -1)
                 return True 
         return False 
 
-    def allCycle(self) -> list[list[int]]:
-        """Returns all the cycles in a graph. 
-
-           @return  cycles, cycles[i] contains all the vertices in ith cycle 
-                    an empty list if no cycle
-        """
-        visited = [0] * self.V  # 记录节点的状态  3种：0：未访问，1：已访问未回溯，2：已访问并回溯
-        cycles = []             # store possible cycles
-        edge_to = [0] * self.V  # edge_to[v] is parent vertex of v
-        
-        def dfs(v: int, parent: int) -> bool:
-            """Does the subgraph search from vertex v has cycles?
-               若存在，返回True；若不存在，返回False 
-               Side effects: change `cycles` if find cycle
+    def allCycles(self) -> list[list[int]]:
+        """O(V+E) Returns all the cycles in the undirected graph (using visited array)
+           @return cycles, cycles[i] contains all the vertices in the ith cycle 
+        """       
+        def dfs(v: int, p: int) -> list[list[int]]:
+            """return all the cycles in the subgraph reachable from vertex v
+               https://algs4.cs.princeton.edu/41graph/Cycle.java.html
             """
-            if visited[v] == 2:             # 若当前节点已访问并回溯，不需再次访问
-                return False        
-            elif visited[v] == 1:           # 若当前节点已访问未回溯，说明存在环，不存在拓扑排序
-                cycle = []
-                cycle.append(parent)
-                cur = parent
-                while cur != v:
-                    cur = edge_to[cur]
-                    cycle.append(cur)
-                    
-                cycles.append(cycle)
-                return True 
-            else:                            # 若当前节点还未访问，访问
-                edge_to[v] = parent 
-                visited[v] = 1               # 当前节点标记为已访问未回溯
-                for w in self.adj[v]: # 搜索邻接节点
-                    if w != parent and dfs(w, v):        # 子图存在环
-                        return True   
-                visited[v] = 2              # 当前节点的所有邻接节点已入栈，回溯完成
-                return False  
+            cycles = []
+            visited[v] = 1               # mark vertex as visited but haven't been backtracked
+
+            # search adjacent vertices
+            for u in self.adjList[v]:
+                
+                # case 1: adjacent vertex is visited and backtracked, no cycle
+                if visited[u] == 2:             
+                    continue       
+                
+                # case 2: adjacent vertex is visited and not backtracked but is parent, no cycle
+                if visited[u] == 1 and u == p:  
+                    continue  
+                
+                # case 3: adjacent vertex is visited and not backtracked and is not parent, a cycle is found
+                if visited[u] == 1 and u != p:       
+                    # build the cycle by tracing from v to u:  v -> ... -> u (-> v)  
+                    cycle = [v]
+                    cur = v                 
+                    while cur != u:
+                        cur = edgeTo[cur]
+                        cycle.append(cur)
+                    cycles.append(cycle[::-1])  # reverse cycle because vertex u is entry of this cycle
+                    continue 
+                
+                # search cycle in the subgraph reachable from adjacent vertex
+                edgeTo[u] = v 
+                dfs(u, v)    
+            
+            visited[v] = 2   # mark the current vertex as backtracked after all the adjacent vertices are explored, means no cycle
+            return cycles               
         
-        # 遍历所有节点，搜索图中的所有环
+        visited = [0] * self.V      # 3 kinds of vertex states  0: unvisited, 1: visited but haven't been backtracked, 2: visited and backtracked
+        edgeTo = [-1] * self.V      # to rebuild cycles, edgeTo[v] is parent vertex of vertex v
+        cycles = []                 # to store all the cycles, cycles[i] contains all the vertices in the ith cycle 
+        
+        # traverse all the vertices
         for v in range(self.V):
             if not visited[v]:
-                dfs(v, -1) 
-        
+                cycles += dfs(v, -1) 
         return cycles 
 
-    def hasParallelEdges(self) -> bool:
-        """Parallel edges detection.
-           @return True if the graph have 2 parallel edges, False otherwise
+    def allCycles(self) -> list[list[int]]:
+        """O(V+E) Returns all the cycles in a undirected graph (using stack)
+            @return  cycles, cycles[i] contains all the vertices in ith cycle 
         """
-        visited = [False] * self.V 
+        def dfs(v: int, p: int) -> list[list[int]]:
+            """return all the cycles in the subgraph that is reachable from vertex v."""
+            cycles = []
+            visited[v] = inStack[v] = True  # Mark vertex as visited and in stack
+
+            # search adjacent vertices
+            for u in self.adjList[v]:
+                # case 1: adjacent vertex is visited and backtracked, no cycle
+                if visited[u] and not inStack[u]:
+                    continue 
+                
+                # case 2: adjacent vertex is visited and not backtracked, but adjacent vertex is parent, no cycle
+                if visited[u] and inStack[u] and u == p:
+                    continue 
+                
+                # case 3: adjacent vertex is visited and not backtracked, and adjacent vertex is not parent, find a cycle
+                if visited[u] and inStack[u] and u != p:
+                    # adjacent vertex is entry of the cycle, rebuild the cycle by tracing from v to u: v -> ... -> u
+                    cycle = [v]     
+                    cur = v 
+                    while cur != u:
+                        cur = edgeTo[cur]
+                        cycle.append(cur)
+                    cycles.append(cycle[::-1])  # reverse the cycle
+                    continue 
+
+                edgeTo[u] = v 
+                dfs(u, v)
+            
+            inStack[v] = False  # mark current vertex as backtracked after all of its neighbours are visited
+            return cycles 
+
+        visited = [False] * self.V              # visited[u]: whether vertex u is unvisited
+        inStack = [False] * self.V              # inStack[u]: whether vertex u is in recursion stack
+        edgeTo = [-1] * self.V                  # To rebuild cycles, edgeTo[u]: parent vertex of u
+        cycles = []                             # To store all cycles, cycles[i] contains all the vertices in ith cycle 
+
+        # traverse all the vertices
         for v in range(self.V):
-            # check parallel edges incident on v 
-            for w in self.adj[v]:
-                if visited[w]:
-                    return True 
-                visited[w] = True 
-            # reset visitied[w] = False for all w
-            for w in self.adj[v]:
-                visited[w] = False
-        return False
-
-
-    def isConneted(self) -> bool:
-        """Check if graph is connected
-           Return True if connected False otherwise
-        """
-        visited = [False] * self.V 
-
-        def dfs(v: int) -> None:
-            """遍历当前节点所在的连通分量"""
-            visited[v] = True 
-            for w in self.adj[v]:
-                if not visited[w]:
-                    dfs(w)
-        dfs(0)
-        return sum(visited) == self.V 
-    
-    def CC(self) -> list[list[int]]:
-        """Returns the connected components (CC) of a graph
-           
-           @return a 2D array of length the number of CCs, each element is an array of vertices in a CC.
-        """
-        def dfs(v: int) -> list[int]:
-            """遍历当前节点所在的连通分量
-                返回该连通分量包含的节点
-                @param v: index of vertex v 
-            """
-            component = [v]                 
-            visited[v] = True
-
-            # 遍历节点的邻接列表
-            for w in self.adj[v]:
-                if not visited[w]:
-                    component += dfs(w)
-            return component                    
-
-        # 记录节点的访问状态
-        visited = [False] * self.V
-        
-        # 储存连通分量
-        components = []
-
-        # 遍历V个节点
-        for v in range(self.V):
-            # 若节点未访问过，说明属于新的连通分量
             if not visited[v]:
-                # 添加该节点所在的连通分量
-                components.append(dfs(v))
+                cycles += dfs(v, -1)
+        return cycles
+    
+    def hasPath(self, source: int, target: int) -> bool:
+        """O(V+E) single-source reachability
+        return whether a path exists from source vertex to target vertex
+        """
+        def dfs(v: int, target: int) -> bool:
+            """return whether there is a path from current vertex to target vertex
+               https://algs4.cs.princeton.edu/41graph/DepthFirstPaths.java.html
+            """
+            # base case: vertex is target
+            if v == target:
+                return True
+            visited[v] = True   # mark vertex as visited
+            # iterates over adjacent vertices
+            for u in g[v]:
+                if not visited[u] and dfs(u):  # there is a path from adjacent vertex to target vertex
+                    return True 
+            return False 
 
-        return components
+        def bfs(source: int, target: int) -> bool:
+            """return whether there is a path from current vertex to target vertex"""
+            queue = deque([source])
+            visited[source] = True 
+            while queue:
+                v = queue.popleft()
+                # case: vertex is target
+                if v == target:
+                    return True
+                # iterates over adjacent vertices
+                for u in g[v]:
+                    if not visited[u]: 
+                        queue.append(u)
+                        visited[u] = True
+            return False 
 
+        visited = [False] * self.V 
+        return dfs(source, target)  # bfs(source, target)
 
-    def onePath(self, source: int, target: int, type: str='dfs') -> list[int]:
+    def onePath(self, source: int, target: int) -> list[int]:
         """Returns a simple path from source vertex to target vertex. 
-           DFS/BFS O(V+E)
-           
-           @param type: either 'dfs' or 'bfs' different way to search the graph
-           @return a path. if no such path, return an empty list.
+           O(V+E) DFS/BFS  if using BFS, the path is shortest
+           @return a list of vertices. if no such path, return an empty list.
         """
         def dfs(v: int) -> None:
-            """DFS a CC from vertex v"""
             visited[v] = True
-
-            for w in self.adj[v]:
-                if not visited[w]:
-                    edge_to[w] = v  
-                    dfs(w) 
+            # base case: vertex is target
+            if v == target:
+                return 
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    edgeTo[u] = v 
+                    dfs(u) 
 
         def bfs(v: int) -> None:
-            """BFS a CC from vertex v"""
-            visited[v] = True
-            q = deque([v])
-            dist_to[v] = 0
-            while q:
-                v = q.popleft()
-                for w in self.adj[v]:
-                    if not visited[w]:
-                        edge_to[w] = v 
-                        dist_to[w] = dist_to[v] + 1
-                        q.append(w) 
-                        visited[w] = True         
-            
-        visited = [False] * self.V  # visited[v] = is there an source-target path?
-
-        # DFS: edge_to[v] = last edge on source-target path  i.e. parent vertex of v
-        # BFS: edge_to[v] = last edge on SHORTEST source-target path
-        edge_to = [0] * self.V 
-
-        # only for BFS  dist_to[v] = number of edges SHORTEST source-target path, i.e., shortest path length
-        dist_to = [float('inf')] * self.V   
-        
-        if type == 'dfs':
-            dfs(source)  
-        elif type == 'bfs':
-            bfs(source)   
+            """https://algs4.cs.princeton.edu/41graph/BreadthFirstPaths.java.html"""
+            queue = deque([v])
+            visited[v] = True 
+            while queue:
+                v = queue.popleft()
+                if v == target:
+                    return 
+                for u in self.adjList[v]:
+                    if not visited[u]:
+                        queue.append(u) 
+                        visited[u] = True 
+                        edgeTo[u] = v
+                             
+        visited = [False] * self.V          # visited[u]: is there an source-u path?
+        edgeTo = [0] * self.V               # edgeTo[u]: last edge on source-u path, i.e., parent of vertex u
+        dfs(source)  # bfs(source)
 
         path = []
         if not visited[target]:     # no such path
-            print(f"{source} to {target}: not connected")
-            return 
-            # return path
+            return path
         
         cur = target  
-        while cur != source:
+        while True:
             path.append(cur)
-            cur = edge_to[cur]
-        path.append(source)
-
-        path = path[::-1]
-
-        if type == 'dfs':     # 0 to 5: [0, 2, 4, 5]
-            print(f"{source} to {target}: {path}")
-        elif type == 'bfs':   # 0 to 5 (1): [0, 5]    1 is shortest path length
-            print(f"{source} to {target} ({dist_to[target]}): {path}")
-        
-        # return path 
-
-    
-    def allPath(self, source: int, target: int) -> list[list[int]]:
+            if cur == source:
+                break 
+            cur = edgeTo[cur]
+        return path[::-1] 
+   
+    def allPaths(self, source: int, target: int) -> tuple[int, list[list[int]]]:
         """Returns all the simple paths from source vertex to target vertex. 
-           DFS + backtracking
-           Warning: there many be exponentially many simple paths in a graph, so no algorithm can run efficiently for large graphs.
-           
-           @param type: either 'dfs' or 'bfs' different way to search the graph
-           @return all the paths. if no such path, return an empty list.
+           T: O(V*2^V)    O(V) for each path, worst-case 2^V paths
+           Warning: there may be exponentially many simple paths in a graph, so no algorithm can run efficiently for large graphs.
         """
-        def dfs(v: int) -> None:
-            """搜索从当前节点到达目标节点的路径
+        @lru_cache(maxsize=None)
+        def dfs(v: int, target: int, path: list[int]) -> tuple[int, list[list[int]]]:
+            """return number of paths, and a list of all the paths from vertex v to target vertex
+               DFS + backtracking
+               https://algs4.cs.princeton.edu/41graph/AllPaths.java.html
             """
-            visited[v] = True
+            numOfPaths, paths = 0, []
             path.append(v)       # add current vertex to path
+            onPath[v] = True     # mark vertex as on path
 
-            if v == target:      # 若当前节点就是目标节点，当前路径加入答案
+            # O(V) case 1: vertex is target, add path to answer
+            if v == target:
+                numOfPaths += 1
                 paths.append(path.copy())
 
-            for neighbor in self.adj[v]:
-                if not visited[neighbor]:
-                    dfs(neighbor)   # 搜索从邻接节点到达目标节点的路径
+            # case 2: vertex is not target, search adjacent vertices
+            else:   
+                for u in self.adjList[v]:
+                    if not onPath[u]:
+                        cnt, p = dfs(u, target, path)
+                        numOfPaths += cnt 
+                        paths += p 
             
-            # backtracking: done exploring from v, so remove v from path and recover the visited[v]
-            path.pop()
-            visited[v] = False
+            # explicit backtracking
+            path.pop()              # remove vertex from path
+            onPath[v] = False       # recover on path state of vertex
+            return numOfPaths, paths 
+        
+        def bfs(source: int, target: int, path: list[int]) -> tuple[int, list[list[int]]]:
+            """return number of paths, and a list of all the paths from vertex v to target vertex"""
+            numOfPaths, paths = 0, []
+            path.append(v)   # add vertex to path
+            onPath[v] = True  # mark vertex as on path
+            queue = deque([(source, path, onPath)])
+            while queue:
+                v, path = queue.popleft()
 
-        visited = [False] * self.V
-        path, paths = [], []
-        dfs(source)
+                # O(V) case 1: vertex is target, add path to answer
+                if v == target:
+                    paths.append(path)
+                    numOfPaths += 1
+                    continue
+                # case 2: vertex is not target, search adjacent vertices
+                for u in self.adjList[v]:
+                    if not onPath[u]:
+                        path.append(u)
+                        onPath[u] = True 
+                        queue.append((u, path.copy(), onPath.copy()))   # implicit backtracking: each adjacent vertex has its own path and onPath, and changes to one path do not affect other paths.
+            return numOfPaths, paths
 
-        return paths 
+        onPath = [False] * self.V        # a vertex can be visited multiple times in different paths.
+        return dfs(source, target, [])  # bfs(source, target, [])  
 
     def isBipartite(self) -> bool:
-        """Determine a graph is either (i) a bipartition or (ii) an odd-length cycle. O(V+E)
-        """
-        visited = [0] * self.V          # 记录所有节点染色情况，初始化都未染色
-        A, B = 1, 2                     # 可以染的两种颜色/属于的2种集合
+        """O(V+E) return whether the graph is bipartite
 
-        def dfs(node: int, color: int) -> bool:
-            """判断当前节点所在连通分量是否为二分图
-               color: 当前节点应染的颜色
+        an undirected graph is either a bipartite or has an odd-length cycle. 
+        """
+        def dfs(v: int, color: int) -> bool:
+            """O(V+E) return whether the CC containing vertex v is bipartite
+
+            @params color: correct color for vertex v 
+            https://algs4.cs.princeton.edu/41graph/Bipartite.java.html
             """
-            visited[node] = color           # 对当前节点染色
-            
-            cNei = B if color == A else A   # 邻接节点应染成的颜色
-            
-            # 遍历所有邻接节点
-            for neighbor in self.adj[node]:
-                if not visited[neighbor] and not dfs(neighbor, cNei):
-                    return False 
-                elif visited[neighbor] != cNei:
+            visited[v] = color                   # color the vertex
+            # search adjacent vertices
+            for u in self.adjList[v]:
+                # adjacent vertex is visited
+                if visited[u] != UNCOLORED:
+                    # base case 1: colored incorrectly
+                    if visited[u] == color:
+                        return False 
+                    # base case 2: colored correctly
+                    else:
+                        continue 
+                if not dfs(u, color^1):         # flip color
                     return False 
             return True 
 
-        # 对每个连通分量，任选一个节点染成A，从该节点开始遍历整个分量
-        for v in range(self.V):
-            if not visited[v] and not dfs(v, A):
-                return False 
+        def bfs(v: int, color: int) -> bool:
+            """O(V+E) return whether the CC containing vertex v is bipartite
+
+            @params color: color for vertex v 
+            """
+            queue = deque([(v, color)])
+            visited[v] = color 
+            while queue:
+                v, color = queue.popleft()
+                # search adjacent vertices
+                for u in self.adjList[v]:
+                    if visited[u] != UNCOLORED:
+                        # case 1: adjacent vertex is incorrectly colored
+                        if visited[u] == color:
+                            return False 
+                        # case 2: adjacent vertex is correctly colored
+                        else:
+                            continue 
+                    queue.append((u, color^1))  # color for adjacency vertex is flipped color
+                    visited[u] = color^1
+            return True
         
+        UNCOLORED, A, B = 0, 1, 2               # two kinds of colors
+        visited = [UNCOLORED] * self.V          # visited[i]: colored state of vertex i, initialized as uncolored
+        
+        for v in range(self.V):
+            if visited[v] == UNCOLORED and not dfs(v, A): # change here to use bfs(v, A)
+                return False 
         return True
-
-
-
 
 
 if __name__ == '__main__':
     edges = [[0,2],[0,5],[2,4],[1,6],[5,4]]
-
     g = UndirectedGraph(7, edges)
-    
     print(f"Undirected graph {g}")
 
-    # a simple path from source 0 to every vertex in graph
-    source = 0
-    print(f"\nDFS source = {source}")
-    for target in range(g.V):
-        g.onePath(source, target, type='dfs')
-
-    source = 0
-    print(f"\nBFS source = {source}")
-    for target in range(g.V):
-        g.onePath(source, target, type='bfs')
-    
-    # all the simple paths from vertex 0 to vertex 4
-    paths = g.allPath(0, 4)
-    print(f"\nall the simple paths from vertex 0 to vertex 4: {paths}")
-    
-    components = g.CC()
-
-    if len(components) > 1:
-        print(f"Non-connected graph with {len(components)} Connected components:")
-        for c in components:
-            print(c)
+    # Graph connectivity
+    CCs = g.allCCs()
+    if len(CCs) > 1:
+        print(f"Non-connected graph with {len(CCs)} Connected components:")
+        for CC in CCs:
+            print(CC)
     else:
         print("Connected graph")
-    
-    # cycle detection
+
+    # Cycle detection
     if g.hasCycle():
         cycles = g.allCycle()
         print(f"Cycles: {cycles}")
+
+    # a simple path from source vertex 0 to every vertex in graph
+    source = 0
+    print(f"\nDFS source = {source}")
+    for target in range(g.V):
+        path = g.onePath(source, target, type='dfs')
+        print(f"{source} to {target}: {path}")
+
+    # all the simple paths from vertex 0 to vertex 4
+    paths = g.allPaths(0, 4, type='dfs')
+    print(f"\nall the simple paths from vertex 0 to vertex 4: {paths}")
+    

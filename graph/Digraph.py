@@ -1,285 +1,759 @@
 """
-   A directed graph, implemented using an array of lists.
+   A directed graph
    Parallel edges and self-loops allowed.
 """
-from collections import deque 
+from collections import deque
+from functools import lru_cache 
 
 class Digraph:
-
     def __init__(self, v: int, edges: list[tuple[int, int]] =None) -> None:
-        """Initialize an empty digraph with v vertices and 0 edges."""
+        """O(V+E) Initialize an empty digraph with v vertices and 0 edges."""
         self.V = v                              # number of vertices
         self.E = 0                              # number of edges
-        self.adj = [[] for _ in range(self.V)]  # adjacency list of a graph
+        self.adjList = [[] for _ in range(self.V)]  # adjacency list of a graph
+        self.adjMatrix = [[0]*self.V for _ in range(self.V)]   # adjacency matrix of a graph
         self.edges = edges                      # edge list of a graph
         self.indeg = [0] * self.V               # indegree[v] indegree of vertex v
         self.outdeg = [0] * self.V              # outdegree[v] outdegree of vertex v
+        self.preorder = []                      # vertices in the pre-order traversal
+        self.postorder = []                     # vertices in the post-order traversal
+        self.reversePostorder = []              # vertices in the reverse post-order traversal
 
-        # construct adjacency list
-        if edges:
-            for v, w in edges:
-                self.add_edge(v, w)
+        # O(E) construct adjacency list, adjacency matrix, indegree array, outdegree array
+        for v, u in self.edges:
+            self.add_edge(v, u)
+        
+        # O(V+E) compute preorder, postorder and reverse postorder of graph
+        self.depthFirstOrder()
 
     def __str__(self) -> str:
-        """Returns an edge list representation of graph"""
+        """O(V+E) Returns an edge list representation of graph """
         s = f"{self.V} vertices, {self.E} edges"
-
         for v in range(self.V):   # print vertex v and its neighbors
-            s += "\n" + f"{v}: {' '.join(str(w) for w in self.adj[v])}"
-
+            s += "\n" + f"{v}: {' '.join(str(u) for u in self.adjList[v])}"
         return s
 
-    def add_edge(self, v: int, w: int) -> None:
-        """adds the directed edge v->w to this graph"""
-        self.adj[v].append(w)
-        self.outdeg[w] += 1
-        self.indeg[w] += 1
+    def add_edge(self, v: int, u: int) -> None:
+        """O(1) adds the directed edge v->u to this graph"""
+        self.adjList[v].append(u)
+        self.adjMatrix[v][u] = 1
+        self.outdeg[u] += 1
+        self.indeg[u] += 1
         self.E += 1 
 
+    def depthFirstOrder(self) -> None:
+        """O(V+E) compute preorder and postorder for a digraph
+           https://algs4.cs.princeton.edu/42digraph/DepthFirstOrder.java.html
+        """
+        def dfs(v: int) -> None:
+            """search the CC containing vertex v"""
+            self.preorder.append(v)     # pre-order is order of dfs() calls. Put the vertex on a queue BEFORE the recursive calls.
+            visited[v] = True 
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    dfs(u)
+            self.postorder.append(v)    # post-order is order in which vertices are done. Put the vertex on a queue AFTER the recursive calls.
+
+        visited = [False] * self.V
+        for v in range(self.V):
+            if not visited[v]:
+                dfs(v)  
+        self.reversePostorder = self.postorder[::-1]    # reverse post-order is just reversing post-order. Put the vertex on a stack after the recursive calls.
+    
+    def reverse(self) -> 'Digraph':
+        """O(E) reverse all the edges in the digraph, return a reversed digraph """
+        reversedEdges = [(u, v) for v, u in self.edges]
+        return Digraph(self.V, reversedEdges)
+    
     def indegree(self, v: int) -> int:
-        """Returns the in-degree of vertex v"""
+        """O(1) Returns the in-degree of vertex v"""
         if not (0 <= v < self.V):
             raise IndexError(f"Vertex {v} is not between 0 and {self.V-1}")
         return self.indeg[v]
 
     def outdegree(self, v: int) -> int:
-        """Returns the out-degree of vertex v"""
+        """O(1) Returns the out-degree of vertex v """
         if not (0 <= v < self.V):
             raise IndexError(f"Vertex {v} is not between 0 and {self.V-1}")
         return self.outdeg[v]
 
-
-    def number_of_self_loops(self) -> int:
-        """Returns the number of self-loops in graph"""
-        count = 0
+    def hasSelfLoop(self) -> bool:
+        """O(V+E) self-loop detection """
         for v in range(self.V):
-            for w in self.adj[v]:
-                if w == v:
-                    count += 1
-        return count
+            for u in self.adjList[v]:
+                if u == v:
+                    return True 
+        return False  
 
-    def postOrder(self) -> list[list[int]]:
-        """Post-order traverse the digraph"""
+    def allSelfLoops(self) -> list[int]:
+        """O(V+E) Returns the all the self-loops in graph"""
+        selfloops = set()
+        for v in range(self.V):
+            for u in self.adjList[v]:
+                if u == v:
+                    selfloops.add(u)
+        return list(selfloops)
+ 
+    def hasCycle(self) -> bool:
+        """O(V+E) Cycle detection in a digraph (using stack)
+           different from undirected graph, 
+           adjacent vertex can't be parent of vertex if not a cycle because edge is uni-directional
+        """
+        def dfs(v: int) -> bool:
+            """Cycle detection in the subgraph reachable from vertex v"""
+            visited[v] = inStack[v] = True   # mark vertex as visited and put vertex in stack
+            # search adjacent vertices
+            for u in self.adjList[v]:
+                if visited[u]:
+                    # case 1: adjacent vertex is visited and is in stack, a cycle is found
+                    if inStack[u]:
+                        return True 
+                    # case 2: adjacent vertex is visited and backtracked, no cycle
+                    else:
+                        continue 
+                if dfs(u):
+                    return True 
+            inStack[v] = False          # remove vertex from stack
+            return False
+        
+        # special case: identify parallel edge as a cycle
+        if self.hasParallelEdges():
+            return True 
+        
         visited = [False] * self.V
-        res = []
-
-        def dfs(v: int) -> None:
-            """遍历当前节点所在的连通分量"""
-            visited[v] = True 
-            for w in self.adj[v]:
-                if not visited[w]:
-                    dfs(w)
-            res.append(v)
-        
+        inStack = [False] * self.V
         for v in range(self.V):
-            if not visited[v]:
-                dfs(v)
+            if not visited[v] and dfs(v):
+                return True
+        return False
+
+
+    def hasCycle(self) -> bool:
+        """O(V+E) Cycle detection in digraph (using visited array)"""     
+        def dfs(v: int) -> bool:
+            """Cycle detection in the subgraph reachable from vertex v""" 
+            visited[v] = 1     # mark vertex as visited but not backtracked
+            for u in self.adjList[v]:
+                # case 1: adjacent vertex is visited and backtracked, means no cycle
+                if visited[u] == 2:             
+                    continue   
+                # case 2: adjacent vertex is visited but not backtracked, means a cycle exists, vertex u is entry of this cycle
+                if visited[u] == 1:  
+                    return True 
+                if dfs(u):
+                    return True 
+            
+            visited[v] = 2  # mark vertex as backtracked, means no cycle
+            return False 
         
-        return res 
+        # special case: identify parallel edge as a cycle
+        if self.hasParallelEdges():
+            return True 
+        
+        visited = [0] * self.V      # 3 kinds of vertex states  0: unvisited, 1: visited but haven't been backtracked, 2: visited and backtracked
+        for v in range(self.V):
+            if not visited[v] and dfs(v, -1):
+                return True 
+        return False 
 
-
-    def isConneted(self) -> bool:
-        """Check if graph is connected
-           Return True if connected False otherwise
+    def allCycles(self) -> list[list[int]]:
+        """O(V+E) Returns all the cycles in a digraph (using visited array)
+            @return cycles: cycles[i] contains all the vertices in ith cycle 
         """
-        visited = [False] * self.V 
+        def dfs(v: int) -> list[list[int]]:
+            """return a list of cycles that is reachable from vertex v."""
+            cycles = []
+            visited[v] = 1          # mark vertex as visited and not backtracked
+             
+            # search adjacent vertices
+            for u in self.adjList[v]:
+                # case 1: adjacent vertex is visited and backtracked, means no cycle
+                if visited[u] == 2:             
+                    continue 
+                
+                # case 2: adjacent vertex is visited but not backtracked, means a cycle exists, vertex u is entry of this cycle
+                if visited[v] == 1:
+                    # rebuild cycle from parent vertex: v -> ... -> u
+                    cycle = [v]
+                    cur = v 
+                    while cur != u:
+                        cur = edgeTo[cur]
+                        cycle.append(cur)
+                    cycles.append(cycle[::-1]) 
+                    continue 
+                
+                edgeTo[u] = v           # Keep track of parent vertex
+                dfs(u, v)
 
-        def dfs(v: int) -> None:
-            """遍历当前节点所在的连通分量"""
-            visited[v] = True 
-            for w in self.adj[v]:
-                if not visited[w]:
-                    dfs(w)
+            visited[v] = 2  # mark vertex as backtracked, means no cycle
+            return cycles 
 
-        dfs(0)
-        return sum(visited) == self.V 
-    
+        visited = [0] * self.V                  # 3 kinds of vertex states  0: unvisited, 1: visited but haven't been backtracked, 2: visited and backtracked
+        edgeTo = [-1] * self.V                  # to rebuild cycles, edgeTo[u]: parent of vertex u
+        cycles = []                             # to store all cycles
+        # traverse all the vertices
+        for v in range(self.V): 
+            if not visited[v]: 
+                cycles += dfs(v)
+        return cycles  # Return all found cycles
 
 
-    def CC(self) -> list[list[int]]:
-        """Returns the connected components (CC) of agraph
-           
-           @return a 2D array of length the number of CCs, each element is an array of vertices in a CC.
+    def allCycles(self) -> list[list[int]]:
+        """O(V+E) Returns all the cycles in a digraph (using stack)
+            @return cycles: cycles[i] contains all the vertices in ith cycle 
         """
-        def dfs(v: int) -> list[int]:
-            """遍历当前节点所在的连通分量
-                返回该连通分量包含的节点
-                @param v: index of vertex v 
+        def dfs(v: int, p: int) -> None:
+            """Search the subgraph that is reachable from vertex v.
+               https://algs4.cs.princeton.edu/42digraph/DirectedCycle.java.html
             """
-            component = [v]                 
-            visited[v] = True
+            cycles = []
+            visited[v] = inStack[v] = True      # Mark vertex as visited and in stack
+            
+            # search all the adjacent vertices
+            for u in self.adjList[v]:
+                # case 1: adjacent vertex is visited and backtracked
+                if visited[u] and not inStack[u]:
+                    continue  
+                # case 2: adjacent vertex is visited but not backtracked, a cycle is found 
+                if visited[u] and inStack[u]:
+                    # adjacent vertex is entry of the cycle, rebuild the cycle by tracing from v to u: v -> ... -> u
+                    cycle = [v]
+                    cur = v 
+                    while cur != u:
+                        cur = edgeTo[cur]
+                        cycle.append(cur)
+                    cycles.append(cycle[::-1]) 
+                    continue
+                edgeTo[u] = v             # Keep track of parent vertex
+                dfs(u, v)
+            
+            inStack[v] = False      # remove vertex from stack after all the adjacent vertices are explored
+            return cycles
 
-            # 遍历节点的邻接列表
-            for w in self.adj[v]:
-                if not visited[w]:
-                    component += dfs(w)
-            return component                    
+        visited = [False] * self.V              # visited[u]: whether vertex u is unvisited
+        inStack = [False] * self.V              # inStack[u]: whether vertex u is in recursion stack
+        edgeTo = [-1] * self.V                  # To rebuild cycles, edgeTo[u]: parent vertex of u
+        cycles = []                             # To store all cycles
 
-        # 记录节点的访问状态
-        visited = [False] * self.V
-        
-        # 储存连通分量
-        components = []
-
-        # 遍历V个节点
-        for v in range(self.V):
-            # 若节点未访问过，说明属于新的连通分量
+        # traverse all the vertices
+        for v in range(self.V):  
             if not visited[v]:
-                # 添加该节点所在的连通分量
-                components.append(dfs(v))
+                cycles += dfs(v)
+        return cycles  # Return all found cycles
+    
+    def isConneted(self) -> bool:
+        """O(V+E) Check graph connectivity"""
+        def dfs(v: int) -> None:
+            """traverse the CC containing vertex v""" 
+            visited[v] = True 
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    dfs(u)
+        
+        def bfs(v: int) -> list[int]:
+            """traverse the CC containing vertex v"""
+            queue = deque([v])
+            visited[v] = True
+            while queue:
+                v = queue.popleft()
+                for u in self.adjList[v]:
+                    if not visited[u]: 
+                        queue.append(u)
+                        visited[u] = True
 
-        return components
+        visited = [False] * self.V
+        dfs(0)          # bfs(0) 0 or random.choice(range(self.V))
+        return sum(visited) == self.V
 
-    def strongCC(self) -> list[list[int]]:
-        """Returns the strong connected components (SCC) of a directed graph
-           Kosaraju's algorithm 
+    def allCCs(self) -> list[tuple[list, int, int]]:
+        """O(V+E) Returns all the connected components (CC) of a graph
+           https://algs4.cs.princeton.edu/41graph/CC.java.html
+           @return CCs: a 2D array of length the number of CCs, 
+                   CCs[i][0]: an array of all the vertices in ith CC.
+                   CCs[i][1]: number of vertices in ith CC
+                   CCs[i][2]: number of edges in ith CC
+        """
+        def dfs(v: int) -> tuple[int, int]:
+            """return number of vertices in the CC, number of edges in the CC"""              
+            nonlocal CCId
+            visited[v] = CCId
+            
+            CC, V, E = [v], 1, 0
+            for u in self.adjList[v]:
+                if visited[u] == -1:
+                    cc, v, e = dfs(u) 
+                    CC += cc 
+                    V += v 
+                    E += 1 + e   # 1 accounts for edge (v, u)
+            return CC, V, E
+
+        def bfs(v: int) -> tuple[int, int]:
+            """return number of vertices in the CC, number of edges in the CC"""
+            nonlocal CCId
+            queue = deque([v])
+            visited[v] = CCId
+
+            CC, V, E = [v], 1, 0
+            while queue:
+                v = queue.popleft()
+                for u in self.adjList[v]:
+                    E += 1
+                    if visited[u] == -1: 
+                        queue.append(u)
+                        CC.append(u)
+                        V += 1
+                        visited[u] = CCId
+            return CC, V, E
+
+        def isConnected(self, v: int, u: int) -> bool:
+            """return whether two vertices are connected"""
+            return visited[v] == visited[u]   
+
+        CCId = 0                    # index of CC
+        visited = [-1] * self.V     # visited[v]: CC index which vertex v is in
+        CCs = []
+        # 1. O(V+E) perform DFS/BFS of graph
+        for v in range(self.V):
+            if visited[v] == -1:
+                CCs.append(dfs(v))  # bfs(v) 
+                CCId += 1
+
+        # # 2. O(V) map each vertex to corresponding CC
+        # CCs = [[] for _ in range(CCId)]
+        # for v in range(self.V):
+        #     CCs[visited[v]].append(v)
+        return CCs
+ 
+    def bruteSCC(self) -> list[list[int]]:
+        """O(V(V+E)) brute force 
+        https://algs4.cs.princeton.edu/42digraph/BruteSCC.java.html
+        Returns the strong connected components (SCC) of a digraph
+        """
+        # 1. O(V) initialize each vertex in its own SCC
+        id = range(self.V)
+
+        # 2. O(V(V+E)) compute transitive closure
+        tc = self.transitiveClosure()
+
+        # 3. O(V^2) if vertex v and u are mutually reachable, assign v to u's component
+        for v in range(self.V):
+            for u in range(v):
+                if tc[v][u] and tc[u][v]:
+                    id[v] = id[u]
+        
+        # 4. O(V) count number of SCCs
+        cnt = sum(id[v] == v for v in range(self.V))
+
+        # 5. O(V) map each vertex to its corresponding SCC
+        SCCs = [[] for _ in range(cnt)]
+        for v in range(self.V):
+            SCCs[id[v]].append(v)
+        return SCCs
+ 
+    def KosarajuSharirSCC(self) -> list[list[int]]:
+        """O(V+E) Kosaraju's algorithm
+            Returns the strong connected components (SCC) of a digraph
+            https://algs4.cs.princeton.edu/42digraph/KosarajuSharirSCC.java.html
            
            @return a 2D array of length the number of SCCs, each element is an array of vertices in a SCC.
         """
-
         def dfs(v: int) -> None:
-            """遍历当前节点所在的强连通分量
-                返回该连通分量包含的节点
-                @param v: index of vertex v 
-            """              
-            visited[v] = True
-            id[v] = count 
-            # 遍历节点的邻接列表
-            for w in self.adj[v]:
-                if not visited[w]:
-                    dfs(w)                  
-        # 记录节点的访问状态
-        visited = [False] * self.V
-        # 记录节点属于的强连通分量
-        id = [0] * self.V 
-        count = 0
+            """search the SCC containing vertex v""" 
+            nonlocal SCCId
+            
+            visited[v] = SCCId 
+            for u in self.adjList[v]:
+                if visited[u] == -1:
+                    dfs(u)                  
 
-        # 反后序遍历 反向图
-        for v in self.reverse().postOrder()[::-1]:
-            # 若节点未访问过，说明属于新的强连通分量
-            if not visited[v]:
-                # 添加该节点所在的新连通分量
+        def isStronglyConnected(self, v: int, u: int) -> bool:
+            """return whether two vertices are strongly connected"""
+            return visited[v] == visited[u]
+    
+        visited = [-1] * self.V   # visited[v]: index of SCC of vertex v, -1 means unvisited
+        SCCId = 0                 # index of SCC
+
+        # 1. O(V+E) search reverse graph in the reverse postorder
+        for v in self.reverse().reversePostorder:
+            if visited[v] == -1:
                 dfs(v)
-                count += 1
+                SCCId += 1
         
-        # 存储强连通分量
-        SCC = [[] for _ in range(count)]
-
+        # 2. O(V) map each vertex to its corresponding SCC
+        SCCs = [[] for _ in range(SCCId)]
         for v in range(self.V):
-            SCC[id[v]].append(v)
+            SCCs[visited[v]].append(v)
+        return SCCs 
 
-        return SCC 
 
-
-    def onePath(self, source: int, target: int, type: str='dfs') -> list[int]:
-        """Returns a valid path from source vertex to target vertex. 
-           DFS/BFS O(V+E)
-           
-           @param type: either 'dfs' or 'bfs' different way to search the graph
-           @return a path. if no such path, return an empty list.
+    def TarjanSCC(self) -> list[list[int]]:
+        """O(V+E) Tarjan's algorithm 
+            https://algs4.cs.princeton.edu/42digraph/TarjanSCC.java.html
+            Returns the strong connected components (SCC) of a digraph
+           @return a 2D array of length the number of SCCs, each element is an array of vertices in a SCC.
         """
         def dfs(v: int) -> None:
-            """DFS a CC from vertex v"""
-            visited[v] = True
+            """search the SCC containing vertex v""" 
+            nonlocal preorderCnt, SCCId 
+            
+            visited[v] = True  
+            low[v] = Min = preorderCnt 
+            preorderCnt += 1
+            stack.append(v)
 
-            for w in self.adj[v]:
-                if not visited[w]:
-                    edge_to[w] = v  
-                    dfs(w) 
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    dfs(u)      
+                    Min = min(Min, low[u])      # update smallest index of vertices reachable from vertex v
+
+            if Min < low[v]:
+                low[v] = Min 
+                return 
+
+            while True:
+                u = stack.pop()
+                id[u] = SCCId 
+                low[u] = self.V 
+                if u == v:
+                    break            
+            SCCId += 1
+
+        visited = [False] * self.V
+        stack = []
+        id = [-1] * self.V       # id[v] = index of SCC containing vertex v
+        low = [0] * self.V      # low[v]: smallest index of vertices reachable from vertex v, including the vertex itself.
+        preorderCnt = 0         # preorder number counter
+        SCCId = 0                 # number of SCCs
+
+        # 1. O(V+E) perform DFS of graph
+        for v in range(self.V):
+            if not visited[v]:
+                dfs(v)
+                
+        # 2. O(V) map each vertex to its corresponding SCC
+        SCCs = [[] for _ in range(SCCId)]
+        for v in range(self.V):
+            SCCs[id[v]].append(v)
+        return SCCs 
+
+
+    def GabowSCC(self) -> list[list[int]]:
+        """O(V+E) Gabow's algorithm (aka Cheriyan-Mehlhorn algorithm)
+            Returns the strong connected components (SCC) of a digraph           
+            https://algs4.cs.princeton.edu/42digraph/GabowSCC.java.html
+           @return a 2D array of length the number of SCCs, each element is an array of vertices in a SCC.
+        """
+        def dfs(v: int) -> None:
+            """search the SCC containing vertex v""" 
+            nonlocal preorderCnt, SCCId 
+            
+            visited[v] = True  
+            preorder[v] = preorderCnt 
+            preorderCnt += 1
+            stack1.append(v)
+            stack2.append(v)
+
+            # search adjacent vertices
+            for u in self.adjList[v]:
+                if visited[u]:
+                    if id[u] == -1:
+                        while preorder[stack2[-1]] > preorder[u]:
+                            stack2.pop()
+                    continue 
+
+                dfs(u)      
+
+            # find SCC containing vertex v
+            if stack2[-1] == v:
+                stack2.pop()
+                while True:
+                    u = stack1.pop()
+                    id[u] = SCCId
+                    if u == v:
+                        break 
+                SCCId += 1            
+    
+        visited = [False] * self.V
+        stack1 = []              # contains vertices of the original graph in preorder
+        stack2 = []              # boundary stack. identify the boundaries of SCC
+        id = [-1] * self.V       # id[v] = index of SCC containing vertex v
+        preorder = [0] * self.V      # preorder[v]: preorder number of vertex v
+        preorderCnt = 0         # preorder number counter
+        SCCId = 0                 # number of SCCs
+
+        # 1. O(V+E) perform DFS of graph
+        for v in range(self.V):
+            if not visited[v]:
+                dfs(v)
+        
+        # 2. O(V) map each vertex to its corresponding SCC
+        SCCs = [[] for _ in range(SCCId)]
+        for v in range(self.V):
+            SCCs[id[v]].append(v)
+        return SCCs
+    
+    def hasPath(self, source: int, target: int) -> bool:
+        """O(V+E) single-source reachability
+        return whether a directed path exist from source vertex to target vertex
+        """
+        @lru_cache(maxsize=None)
+        def dfs(v: int, target: int) -> bool:
+            """return whether a valid path exist from vertex v to target vertex
+               https://algs4.cs.princeton.edu/42digraph/DirectedDFS.java.html
+            """
+            # base case: vertex is target
+            if v == target:
+                return True 
+            visited[v] = True   # mark vertex as visited
+            # search adjacent vertices
+            for u in g[v]:
+                if not visited[u] and dfs(u, target):
+                    return True
+            return False 
+
+        def bfs(source: int, target: int) -> bool: 
+            """return whether a valid path exist from source vertex to target vertex"""
+            queue = deque([source])     # enqueue source vertex
+            visited[source] = True 
+            while queue:
+                v = queue.popleft() 
+                # base case: vertice is target
+                if v == target:
+                    return True
+
+                # search adjacent vertices
+                for u in g[v]:
+                    if not visited[u]:
+                        queue.append(u)      # enqueue adjacent vertex
+                        visited[u] = True 
+            return False 
+
+        visited = [False] * self.V 
+        return dfs(source, target)  # change here to use bfs(source, target)
+
+    def onePath(self, source: int, target: int) -> list[int]:
+        """O(V+E) Returns a valid path from source vertex to target vertex. 
+           return a path. if no such path, return an empty list.
+        """
+        @lru_cache(maxsize=None)
+        def dfs(v: int) -> None:
+            """https://algs4.cs.princeton.edu/42digraph/DepthFirstDirectedPaths.java.html"""
+            # base case: vertex is target 
+            if v == target:
+                return
+            
+            visited[v] = True
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    edgeTo[u] = v
+                    dfs(u) 
 
         def bfs(v: int) -> None:
-            """BFS a CC from vertex v"""
-            visited[v] = True
-            q = deque([v])
-            dist_to[v] = 0
-            while q:
-                v = q.popleft()
-                for w in self.adj[v]:
-                    if not visited[w]:
-                        edge_to[w] = v 
-                        dist_to[w] = dist_to[v] + 1
-                        q.append(w) 
-                        visited[w] = True         
+            """https://algs4.cs.princeton.edu/42digraph/BreadthFirstDirectedPaths.java.html"""
+            queue = deque([v])
+            visited[v] = True 
+            while queue:
+                v = queue.popleft()
+  
+                if v == target:
+                    return
+
+                for u in self.adjList[v]:
+                    if not visited[u]:
+                        edgeTo[u] = v 
+                        queue.append(u)  
+                        visited[u] = True      
             
-        visited = [False] * self.V  # visited[v] = is there an source->target path?
+        visited = [False] * self.V  
+        edgeTo = [0] * self.V 
+        dfs(source)  # change here to use bfs(source)
 
-        # DFS: edge_to[v] = last edge on source->target path  
-        # BFS: edge_to[v] = last edge on SHORTEST source->target path
-        edge_to = [0] * self.V 
-
-        # only for BFS  dist_to[v] = number of edges SHORTEST source->target path, i.e., shortest path length
-        dist_to = [float('inf')] * self.V   
-        
-        if type == 'dfs':
-            dfs(source)  
-        elif type == 'bfs':
-            bfs(source)   
-
+        # find path by tracing back
         path = []
         if not visited[target]:     # no such path
-            print(f"{source} to {target}: not connected")
-            return 
-            # return path
+            return path
 
-        
         cur = target  
-        while cur != source:
+        while True:
             path.append(cur)
-            cur = edge_to[cur]
-        path.append(source)
+            if cur == source:
+                break 
+            cur = edgeTo[cur]
+        return path[::-1]
 
-        path = path[::-1]
+    def allPaths(self, source: int, target: int) -> tuple[int, list[list[int]]]:
+        """Returns all the simple paths from source vertex to target vertex. 
+           T: O(V*2^V)    O(V) for each path, worst-case 2^V paths
+           Warning: there may be exponentially many simple paths in a graph, so no algorithm can run efficiently for large graphs.
+        """
+        @lru_cache(maxsize=None)
+        def dfs(v: int, target: int, path: list[int]) -> tuple[int, list[list[int]]]:
+            """return number of paths, and a list of all the paths from vertex v to target vertex
+               DFS + backtracking
+               https://algs4.cs.princeton.edu/41graph/AllPaths.java.html
+            """
+            numOfPaths, paths = 0, []
+            path.append(v)       # add current vertex to path
+            onPath[v] = True     # mark vertex as on path
 
-        if type == 'dfs':     # 0 to 5: [0, 2, 4, 5]
-            print(f"{source} to {target}: {path}")
-        elif type == 'bfs':   # 0 to 5 (1): [0, 5]    1 is shortest path length
-            print(f"{source} to {target} ({dist_to[target]}): {path}")
+            # O(V) case 1: vertex is target, add path to answer
+            if v == target:
+                numOfPaths += 1
+                paths.append(path.copy())
+
+            # case 2: vertex is not target, search adjacent vertices
+            else:   
+                for u in self.adjList[v]:
+                    if not onPath[u]:
+                        cnt, p = dfs(u, target, path)
+                        numOfPaths += cnt 
+                        paths += p 
+            
+            # explicit backtracking
+            path.pop()              # remove vertex from path
+            onPath[v] = False       # recover on path state of vertex
+            return numOfPaths, paths 
         
-        # return path 
+        def bfs(source: int, target: int, path: list[int]) -> tuple[int, list[list[int]]]:
+            """return number of paths, and a list of all the paths from vertex v to target vertex"""
+            numOfPaths, paths = 0, []
+            path.append(v)   # add vertex to path
+            onPath[v] = True  # mark vertex as on path
+            queue = deque([(source, path, onPath)])
+            while queue:
+                v, path = queue.popleft()
 
+                # O(V) case 1: vertex is target, add path to answer
+                if v == target:
+                    paths.append(path)
+                    numOfPaths += 1
+                    continue
+                # case 2: vertex is not target, search adjacent vertices
+                for u in self.adjList[v]:
+                    if not onPath[u]:
+                        path.append(u)
+                        onPath[u] = True 
+                        queue.append((u, path.copy(), onPath.copy()))   # implicit backtracking: each adjacent vertex has its own path and onPath, and changes to one path do not affect other paths.
+            return numOfPaths, paths
 
-
-    def reverse(self) -> 'Digraph':
-        """Returns the reverse of digraph  O(E)"""
-        g = Digraph(self.V)
-        for v, w in self.edges:
-            g.add_edge(w, v)
-        return g  
+        onPath = [False] * self.V        # a vertex can be visited multiple times in different paths.
+        return dfs(source, target, [])  # bfs(source, target, [])  
 
     def topological(self) -> list[int]:
-        """Returns the topological order of a digraph. O(V+E)
-           if digraph is DAG, then it must has at least one topological order.
-           if digraph is not a DAG, i.e., has cycle, then it doesn't have topological order.
-
-           @return an empty list if no topological order
+        """O(V+E) DFS/BFS Returns the topological order of a digraph. 
+           if digraph is DAG, it has at least one topological order.
+           if digraph is not a DAG, i.e., has cycle, it doesn't have topological order, return an empty list
         """
-        visited = [0] * self.V  # 记录节点的状态  3种：0：未访问，1：已访问未回溯，2：已访问并回溯
-        result = []             # 栈：存储所有已回溯的节点. 先入栈的节点在拓扑排序中位于后面
-        
-        def dfs(v: int) -> bool:
-            """判断通过当前节点的路径是否存在拓扑排序
-               若存在，返回True；若不存在，返回False 
+        def dfs() -> list[int]:
+            """O(V+E) Returns reverse postorder of a digraph.
+               https://algs4.cs.princeton.edu/42digraph/Topological.java.html
             """
-            if visited[v] == 2:             # 若当前节点已访问并回溯，不需再次访问
-                return True       
-            elif visited[v] == 1:           # 若当前节点已访问未回溯，说明存在环，不存在拓扑排序
-                return False 
-            else:                           # 若当前节点还未访问，访问
-                visited[v] = 1              # 当前节点标记为已访问未回溯
-                for neighbor in self.adj[v]:
-                    if not dfs(neighbor):   # 搜索邻接节点
+            if self.hasCycle():
+                return []
+            return self.reversePostorder
+        
+            def helper(v: int) -> bool:
+                """O(V+E) return whether the CC containing vertex v has cycle"""
+                visited[v] = 1              # mark vertex as visited but haven't been backtracked
+                
+                # search adjacent vertices
+                for u in self.adjList[v]:   # if DFS on reversed graph `self.reverse().adjList[v]`, return `top_order` not `top_order[::-1]`
+                    # case 1: adjacent vertex is visited and backtracked, means no cycle
+                    if visited[u] == 2:             
+                        continue       
+                    # case 2: adjacent vertex is visited but haven't been backtracked, means a cycle exists, no topological sort. vertex u is entry of this cycle
+                    if visited[u] == 1:           
+                        return False                     
+                    
+                    if not helper(u):   # search cycle in the subgraph reachable from neighbor
                         return False  
-                visited[v] = 2              # 当前节点的所有邻接节点已入栈，回溯完成
-                result.append(v)            # 当前节点入栈
+                visited[v] = 2           # mark vertex as backtracked, means no cycle
+                postorder.append(v)      # postorder
                 return True 
-        
-        # 遍历所有个节点，判断节点是否存在拓扑排序
-        for v in range(self.V):
-            if not dfs(v): 
-                return [] 
-        
-        return result[::-1]
+            
+            postorder = []                # stack: store all the backtracked vertices, vertices entered stack/backtracked first is located last of topological sort
+            visited = [0] * self.V  # 3 types of visited state of vertex, 0: unvisited, 1: visited but not backtracked, 2: visited and backtracked
+            
+            for v in range(self.V):
+                if not helper(v): 
+                    return [] 
+            return postorder[::-1]  # reverse postorder
 
+        def bfs(self) -> list[int]:
+            """O(V+E) Returns the topological order of a digraph
+               https://algs4.cs.princeton.edu/42digraph/TopologicalX.java.html
+            """
+            top_order = []             # vertices in topological order
+            indeg = self.indeg.copy()  # make a copy of indegree array
+            cnt = 0                    # number of vertices in the array of topological order
+
+            # enqueue all the vertices with indegree 0, which will be placed first in the topological order
+            queue = deque([v for v in range(self.V) if indeg[v] == 0])
+            while queue:
+                v = queue.popleft()
+                top_order.append(v)
+                cnt += 1
+                # search adjacent vertices
+                for u in self.adjList[v]:
+                    indeg[u] -= 1           # remove all the incoming edges from vertex v
+                    if indeg[u] == 0:       # enqueue adjacent vertex if no incoming edges any more
+                        queue.append(u)
+            return top_order if cnt == self.V else []  # or check if sum(indeg) == 0
+        
+        return dfs()  # bfs()
+
+    def transitiveClosure(self) -> list[list[bool]]:
+        """O(V(V+E)) return a transitive closure matrix of digraph
+            https://algs4.cs.princeton.edu/42digraph/TransitiveClosure.java.html
+            suitable for small graph and dense graph, not a solution for the large digraphs 
+            transitive closure of a digraph G is another digraph with the same set of vertices, 
+            but with an edge from v to u if and only if u is reachable from v in G.
+        """
+        def dfs(v: int) -> list[int]:
+            """O(V+E) return all the vertices that are reachable from vertex v"""
+            visited[v] = True
+            reachable = [v]
+
+            for u in self.adjList[v]:
+                if not visited[u]:
+                    reachable += dfs(u) 
+            return reachable
+        
+        tc = [[False]*self.V for _ in range(self.V)]    # a V*V matrix. tc[v][u]: whether u is reachable from v in G
+        
+        for v in range(self.V):
+            visited = [False] * self.V 
+            for u in dfs(v):
+                tc[v][u] = True
+        return tc 
+
+    def FloydWarshallTC(self) -> list[list[bool]]:
+        """O(V^3) Floyd Warshall algorithm
+            https://algs4.cs.princeton.edu/42digraph/WarshallTC.java.html
+
+            return transitive closure matrix of digraph
+            suitable for dense graph, not a solution for the large digraphs 
+            transitive closure of a digraph G is another digraph with the same set of vertices, 
+            but with an edge from v to u if and only if u is reachable from v in G.
+        """
+        tc = [[False]*self.V for _ in range(self.V)]    # a V*V matrix. tc[v][u]: whether u is reachable from v in G
+        
+        # 1. O(V+E) set edges as reachable
+        for v in range(self.V):
+            for u in self.adjList[v]:
+                tc[v][u] = True
+            tc[v][v] = True 
+
+        # 2. O(V^3) try path s -> t via vertex i
+        for i in range(self.V):             # intermediate vertex
+            for s in range(self.V):         # source vertex s
+                # optimization
+                if not tc[s][i]:
+                    continue 
+                for t in range(self.V):     # target vertex t
+                    if tc[s][i] and tc[i][t]:
+                        tc[s][t] = True
+        return tc                 
 
 if __name__ == '__main__':
     edges = [[0,2],[0,5],[2,4],[1,6],[5,4]]
@@ -292,26 +766,25 @@ if __name__ == '__main__':
     source = 0
     print(f"DFS source = {source}")
     for target in range(g.V):
-        g.onePath(source, target, type='dfs')
+        g.onePath(source, target)
 
-    source = 0
-    print(f"BFS source = {source}")
-    for target in range(g.V):
-        g.onePath(source, target, type='bfs')
-    
+    # all the simple paths from vertex 0 to vertex 4
+    paths = g.allPaths(0, 4)
+    print(f"\nall the simple paths from vertex 0 to vertex 4: {paths}")
+
     # connected component
-    components = g.CC()
-    if len(components) > 1:
-        print(f"Non-connected graph with {len(components)} Connected components:")
-        for c in components:
+    CCs = g.allCCs()
+    if len(CCs) > 1:
+        print(f"Non-connected graph with {len(CCs)} Connected components:")
+        for c in CCs:
             print(c)
     else:
         print("Connected graph")
 
     # strong connected component
-    SCC = g.strongCC()
-    print(f"{len(SCC)} Strong Connected components:")
-    for scc in SCC:
+    SCCs = g.KosarajuSharirSCC()
+    print(f"{len(SCCs)} Strong Connected components:")
+    for scc in SCCs:
         print(scc)
     
     # topological order
