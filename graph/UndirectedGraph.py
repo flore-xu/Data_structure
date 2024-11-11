@@ -38,12 +38,76 @@ class UndirectedGraph:
         self.degree[v] += 1
         self.degree[u] += 1
 
-    def degree(self, v: int) -> int:
+    def edges2adjList(self, V: int, edges: list[list[int]]) -> list[list[int]]:
+        """O(V+E) return an adjacency list of a graph from an edge list of a graph
+        
+        @params
+        V: number of vertices
+        E: number of edges
+        edges: edge list.
+        """
+        adjList = [[] for _ in range(V)]  # adjList = defaultdict(list)
+
+        for u, v, w in edges:
+            adjList[u].append((v, w))
+            adjList[v].append((u, w))
+
+        return adjList 
+
+
+    def adjMat2adjList(self, adjMat: list[list[int]]) -> list[list[int]]:
+        """O(V^2) return an adjacency list of a graph from an adjacency matrix of a graph
+        
+        @params
+        adjMat: a V*V matrix. 
+                adjMat[i][j] = w: vertex i and j is adjacent
+                adjMat[i][j] = 0: vertex i and j is not adjacent
+                set adjMat[i][i] = 0. self-loop is not allowed
+        """
+        V = len(adjMat)
+        adjList = [[] for _ in range(V)] # adjList = defaultdict(list)
+
+        for i in range(V):
+            for j in range(V):
+                if adjMat[i][j]:
+                    adjList[i].append((j, adjMat[i][j]))
+        return adjList
+
+
+    def edge2adjMat(self, V: int, edges: list[list[int]]) -> list[list[int]]:
+        """O(V^2) return adjacency matrix from edge list
+
+        @params
+        V: number of vertices
+        E: number of edges
+        edges: edge list.
+        """
+        adjMat = [[0] * V for _ in range(V)]
+
+        for u, v, w in edges:
+            adjMat[u][v] = w 
+            adjMat[v][u] = w 
+     
+        return adjMat
+
+    def degreeOfVertex(self, v: int) -> int:
         """O(1) Returns the degree of vertex v"""
         if not (0 <= v < self.V):
             raise IndexError(f"Vertex {v} is not between 0 and {self.V-1}")
         return self.degree[v]  # len(self.adjList[v])
-    
+
+    def degree(self, V: int, edges: list[list[int]]) -> list[int]:
+        """O(E) return degree of nodes in an undirected graph 
+        
+        return a degree array of length V
+            degree[i] = degree of vertex i = number of edges connected to that vertex
+        """
+        degree = [0] * V
+        for v, u in edges:
+            degree[v] += 1
+            degree[u] += 1
+        return degree
+
     def hasSelfLoop(self) -> bool:
         """O(V+E) self-loop detection"""
         for v in range(self.V):

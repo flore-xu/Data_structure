@@ -64,7 +64,68 @@ class Digraph:
         """O(E) reverse all the edges in the digraph, return a reversed digraph """
         reversedEdges = [(u, v) for v, u in self.edges]
         return Digraph(self.V, reversedEdges)
-    
+
+    def edges2adjList(self, V: int, edges: list[list[int]]) -> list[list[int]]:
+        """O(V+E) return an adjacency list of a graph from an edge list of a graph
+        
+        @params
+        V: number of vertices
+        E: number of edges
+        edges: edge list.
+        """
+        adjList = [[] for _ in range(V)]  # adjList = defaultdict(list)
+
+        for u, v, w in edges:
+            adjList[u].append((v, w))
+        return adjList
+
+
+    def adjMat2adjList(self, adjMat: list[list[int]]) -> list[list[int]]:
+        """O(V^2) return an adjacency list of a graph from an adjacency matrix of a graph
+        
+        @params
+        adjMat: a V*V matrix. 
+                adjMat[i][j] = w: vertex i and j is adjacent
+                adjMat[i][j] = 0: vertex i and j is not adjacent
+                set adjMat[i][i] = 0. self-loop is not allowed
+        """
+        V = len(adjMat)
+        adjList = [[] for _ in range(V)] # adjList = defaultdict(list)
+
+        for i in range(V):
+            for j in range(V):
+                if adjMat[i][j]:
+                    adjList[i].append((j, adjMat[i][j]))
+        return adjList
+
+    def edge2adjMat(self, V: int, edges: list[list[int]]) -> list[list[int]]:
+        """O(V^2) return adjacency matrix from edge list
+
+        @params
+        V: number of vertices
+        E: number of edges
+        edges: edge list.
+        type: 'undirected': undirected graph, 'directed': digraph
+        """
+        adjMat = [[0]*V for _ in range(V)]
+
+        for u, v, w in edges:
+            adjMat[u][v] = w      
+        return adjMat
+
+    def degree(self, V: int, edges: list[list[int]]) -> list[int]:
+        """O(E) return degree of nodes in a digraph 
+
+        return a degree array of length V
+                degree[i][0] = indegree of vertex i = number of edges coming into the vertex
+                degree[i][1] = outdegree of vertex i = number of edges going out from the vertex
+        """
+        degree = [[0, 0] for _ in range(V)]  # defaultdict(lambda: [0, 0]) if V is unknown
+        for v, u in edges:
+            degree[v][1] += 1
+            degree[u][0] += 1
+        return degree
+
     def indegree(self, v: int) -> int:
         """O(1) Returns the in-degree of vertex v"""
         if not (0 <= v < self.V):
